@@ -1,4 +1,5 @@
 import admin from 'firebase-admin';
+import { connectDB } from './db';
 import UserModel from '../models/User';
 
 const {
@@ -56,6 +57,7 @@ export async function sendPushNotification(userToken: string, title: string, bod
 }
 
 export async function sendFCMNotification(userId: string, title: string, body: string) {
+  await connectDB();
   const user = await UserModel.findById(userId);
   if (!user || !user.fcmToken) {
     throw new Error('User token not available for notifications.');

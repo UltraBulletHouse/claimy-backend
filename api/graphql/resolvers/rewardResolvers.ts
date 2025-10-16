@@ -1,4 +1,5 @@
 import { GraphQLContext } from '../context';
+import { connectDB } from '../../lib/db';
 
 function ensureAuthenticated(ctx: GraphQLContext) {
   if (!ctx.user) {
@@ -10,7 +11,8 @@ export const rewardResolvers = {
   Query: {
     getRewards: async (_parent: unknown, _args: unknown, ctx: GraphQLContext) => {
       ensureAuthenticated(ctx);
-      const rewards = await ctx.models.Reward.find({ userId: ctx.user!.id ?? ctx.user!._id }).sort({ createdAt: -1 });
+      await connectDB();
+      const rewards = await ctx.models.Reward.find({ userId: ctx.user!.userId }).sort({ createdAt: -1 });
       return rewards.map((rewardDoc) => rewardDoc.toJSON());
     }
   },
@@ -21,8 +23,9 @@ export const rewardResolvers = {
       ctx: GraphQLContext
     ) => {
       ensureAuthenticated(ctx);
+      await connectDB();
       const rewardDoc = await ctx.models.Reward.create({
-        userId: ctx.user!.id ?? ctx.user!._id,
+        userId: ctx.user!.userId,
         store: args.store,
         code: args.code,
         amount: args.amount
@@ -31,8 +34,9 @@ export const rewardResolvers = {
     },
     markRewardUsed: async (_parent: unknown, args: { id: string; used: boolean }, ctx: GraphQLContext) => {
       ensureAuthenticated(ctx);
+      await connectDB();
       const rewardDoc = await ctx.models.Reward.findOneAndUpdate(
-        { _id: args.id, userId: ctx.user!.id ?? ctx.user!._id },
+        { _id: args.id, userId: ctx.user!.userId },
         { used: args.used },
         { new: true }
       );

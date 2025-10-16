@@ -1,4 +1,5 @@
 import { GraphQLContext } from '../context';
+import { connectDB } from '../../lib/db';
 import { hashPassword, comparePassword, generateToken } from '../../lib/auth';
 import { sendFCMNotification } from '../../lib/fcm';
 
@@ -23,12 +24,16 @@ export const userResolvers = {
         return null;
       }
 
-      const freshUser = await ctx.models.User.findById(ctx.user.id ?? ctx.user._id).select('-password');
+      await connectDB();
+
+      const freshUser = await ctx.models.User.findById(ctx.user.userId).select('-password');
       return freshUser ? freshUser.toJSON() : null;
     }
   },
   Mutation: {
     signup: async (_parent: unknown, args: { email: string; password: string }, ctx: GraphQLContext) => {
+      await connectDB();
+
       const existingUser = await ctx.models.User.findOne({ email: args.email.toLowerCase() });
       if (existingUser) {
         throw new Error('User already exists with that email.');
@@ -44,6 +49,8 @@ export const userResolvers = {
       return buildAuthPayload(user, token);
     },
     login: async (_parent: unknown, args: { email: string; password: string }, ctx: GraphQLContext) => {
+      await connectDB();
+
       const user = await ctx.models.User.findOne({ email: args.email.toLowerCase() });
       if (!user) {
         throw new Error('Invalid credentials.');
@@ -59,9 +66,10 @@ export const userResolvers = {
     },
     updateFcmToken: async (_parent: unknown, args: { token: string }, ctx: GraphQLContext) => {
       ensureAuthenticated(ctx);
+      await connectDB();
 
       const updatedUser = await ctx.models.User.findByIdAndUpdate(
-        ctx.user!.id ?? ctx.user!._id,
+        ctx.user!.userId,
         { fcmToken: args.token },
         { new: true }
       ).select('-password');
@@ -78,6 +86,7 @@ export const userResolvers = {
       ctx: GraphQLContext
     ) => {
       ensureAuthenticated(ctx);
+      await connectDB();
       await sendFCMNotification(args.userId, args.title, args.body);
       return true;
     }

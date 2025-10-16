@@ -1,11 +1,10 @@
-import { connectDB } from '../lib/db';
-import { getUserFromToken } from '../lib/auth';
-import UserModel, { UserDocument, UserModelType } from '../models/User';
+import { getUserFromToken, TokenPayload } from '../lib/auth';
+import UserModel, { UserModelType } from '../models/User';
 import CaseModel, { CaseModelType } from '../models/Case';
 import RewardModel, { RewardModelType } from '../models/Reward';
 
 export interface GraphQLContext {
-  user: UserDocument | null;
+  user: TokenPayload | null;
   models: {
     User: UserModelType;
     Case: CaseModelType;
@@ -15,8 +14,6 @@ export interface GraphQLContext {
 }
 
 export async function createContext(request: Request): Promise<GraphQLContext> {
-  await connectDB();
-
   const authHeader = request.headers.get('authorization');
   const user = await getUserFromToken(authHeader);
 

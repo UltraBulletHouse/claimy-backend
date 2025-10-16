@@ -2,10 +2,6 @@ import mongoose from 'mongoose';
 
 const { MONGODB_URI = '' } = process.env;
 
-if (!MONGODB_URI) {
-  console.warn('Warning: MONGODB_URI is not set. Database operations will fail until it is provided.');
-}
-
 type MongooseGlobal = typeof globalThis & {
   _mongoose?: {
     conn: typeof mongoose | null;
@@ -20,6 +16,14 @@ if (!globalForMongoose._mongoose) {
 }
 
 export async function connectDB(): Promise<typeof mongoose> {
+  if (!MONGODB_URI) {
+    const error = new Error(
+      'Database connection string missing. Set MONGODB_URI in your environment configuration.'
+    );
+    console.error(error.message);
+    throw error;
+  }
+
   if (globalForMongoose._mongoose?.conn) {
     return globalForMongoose._mongoose.conn;
   }

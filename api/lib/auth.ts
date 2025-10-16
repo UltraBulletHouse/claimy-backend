@@ -1,6 +1,5 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import UserModel, { UserDocument } from '../models/User';
 
 const { JWT_SECRET = '' } = process.env;
 
@@ -32,7 +31,7 @@ export function generateToken(payload: TokenPayload): string {
   });
 }
 
-export async function getUserFromToken(authHeader?: string | null): Promise<UserDocument | null> {
+export async function getUserFromToken(authHeader?: string | null): Promise<TokenPayload | null> {
   if (!authHeader || !JWT_SECRET) {
     return null;
   }
@@ -44,12 +43,7 @@ export async function getUserFromToken(authHeader?: string | null): Promise<User
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as TokenPayload;
-    const user = await UserModel.findById(decoded.userId).select('-password');
-    if (!user) {
-      return null;
-    }
-
-    return user;
+    return decoded;
   } catch (error) {
     console.error('Failed to verify token', error);
     return null;
