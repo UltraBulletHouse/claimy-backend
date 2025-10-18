@@ -7,7 +7,7 @@ const {
   GMAIL_OAUTH_REFRESH_TOKEN,
 } = process.env;
 
-function getOAuth2Client() {
+export function getOAuth2Client() {
   if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !GOOGLE_REDIRECT_URI || !GMAIL_OAUTH_REFRESH_TOKEN) {
     throw new Error('Gmail OAuth2 env vars are not fully configured.');
   }
@@ -53,5 +53,8 @@ export async function sendComplaintEmail(params: {
   const from = params.from || 'me'; // 'me' tells Gmail API to use the authenticated account
 
   const raw = makeEmail({ to, from, subject: params.subject, body: params.body });
-  await gmail.users.messages.send({ userId: 'me', requestBody: { raw } });
+  const res = await gmail.users.messages.send({ userId: 'me', requestBody: { raw } });
+  const id = (res.data.id as string) || null;
+  const threadId = (res.data.threadId as string) || null;
+  return { id, threadId };
 }

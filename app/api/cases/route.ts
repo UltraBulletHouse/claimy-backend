@@ -131,7 +131,14 @@ export async function POST(req: NextRequest) {
           `Created at: ${doc.createdAt.toISOString()}`,
           `ID: ${doc.id}`,
         ].filter(Boolean);
-        await sendComplaintEmail({ subject, body: bodyLines.join('\n') });
+        const emailRes = await sendComplaintEmail({ subject, body: bodyLines.join('\n') });
+        if (emailRes?.threadId && !doc.threadId) {
+          try {
+            await CaseModel.findByIdAndUpdate(doc.id, { threadId: emailRes.threadId });
+          } catch (e) {
+            console.error('Failed to attach threadId to case', e);
+          }
+        }
       } catch (emailErr) {
         console.error('Background email send failed:', emailErr);
       }

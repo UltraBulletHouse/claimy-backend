@@ -1,6 +1,6 @@
 import { Schema, model, models, Document, Model } from 'mongoose';
 
-export type CaseStatus = 'PENDING' | 'NEED_INFO' | 'APPROVED' | 'REJECTED';
+export type CaseStatus = 'PENDING' | 'IN_REVIEW' | 'NEED_INFO' | 'APPROVED' | 'REJECTED';
 
 export interface CaseDocument extends Document {
   userId: string; // Firebase UID
@@ -49,8 +49,21 @@ const CaseSchema = new Schema<CaseDocument>(
     },
     status: {
       type: String,
-      enum: ['PENDING', 'NEED_INFO', 'APPROVED', 'REJECTED'],
+      enum: ['PENDING', 'IN_REVIEW', 'NEED_INFO', 'APPROVED', 'REJECTED'],
       default: 'PENDING'
+    },
+    threadId: {
+      type: String,
+      index: true,
+      default: null
+    },
+    lastEmailReplyAt: {
+      type: Date,
+      default: null
+    },
+    lastEmailMessageId: {
+      type: String,
+      default: null
     }
   },
   {
