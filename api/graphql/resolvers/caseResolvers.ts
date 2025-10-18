@@ -29,6 +29,7 @@ export const caseResolvers = {
       await connectDB();
       const caseDoc = await ctx.models.Case.create({
         userId: ctx.user!.userId,
+        userEmail: ctx.user!.email,
         store: args.store,
         product: args.product,
         description: args.description,

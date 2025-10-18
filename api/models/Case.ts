@@ -1,9 +1,10 @@
-import { Schema, model, models, Document, Model, Types } from 'mongoose';
+import { Schema, model, models, Document, Model } from 'mongoose';
 
 export type CaseStatus = 'PENDING' | 'NEED_INFO' | 'APPROVED' | 'REJECTED';
 
 export interface CaseDocument extends Document {
-  userId: Types.ObjectId;
+  userId: string; // Firebase UID
+  userEmail?: string | null;
   store: string;
   product: string;
   description: string;
@@ -16,10 +17,16 @@ export interface CaseDocument extends Document {
 const CaseSchema = new Schema<CaseDocument>(
   {
     userId: {
-      type: Schema.Types.ObjectId,
-      ref: 'User',
+      type: String,
       required: true,
       index: true
+    },
+    userEmail: {
+      type: String,
+      lowercase: true,
+      trim: true,
+      index: true,
+      default: null
     },
     store: {
       type: String,
@@ -51,7 +58,6 @@ const CaseSchema = new Schema<CaseDocument>(
     toJSON: {
       transform: (_doc, ret) => {
         ret.id = ret._id;
-        ret.userId = ret.userId?.toString();
         delete ret._id;
         delete ret.__v;
         return ret;

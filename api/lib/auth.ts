@@ -1,10 +1,11 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { verifyFirebaseIdToken } from './firebaseAdmin';
 
 const { JWT_SECRET = '' } = process.env;
 
 if (!JWT_SECRET) {
-  console.warn('Warning: JWT_SECRET is not set. Authentication will fail until it is provided.');
+  console.warn('Warning: JWT_SECRET is not set. Legacy JWT auth will be disabled.');
 }
 
 export interface TokenPayload {
@@ -32,6 +33,13 @@ export function generateToken(payload: TokenPayload): string {
 }
 
 export async function getUserFromToken(authHeader?: string | null): Promise<TokenPayload | null> {
+  // Prefer Firebase ID token
+  const fb = await verifyFirebaseIdToken(authHeader);
+  if (fb) {
+    return { userId: fb.uid, email: fb.email ?? '' };
+  }
+
+  // Fallback to legacy JWT if configured
   if (!authHeader || !JWT_SECRET) {
     return null;
   }
@@ -45,7 +53,7 @@ export async function getUserFromToken(authHeader?: string | null): Promise<Toke
     const decoded = jwt.verify(token, JWT_SECRET) as TokenPayload;
     return decoded;
   } catch (error) {
-    console.error('Failed to verify token', error);
+    console.error('Failed to verify legacy token', error);
     return null;
   }
 }

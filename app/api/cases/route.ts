@@ -1,0 +1,148 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { connectDB } from '@/api/lib/db';
+import CaseModel from '@/api/models/Case';
+import { getUserFromToken } from '@/api/lib/auth';
+import { sendComplaintEmail } from '@/api/lib/gmail';
+
+const allowedOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim())
+  : ['*'];
+
+function corsHeaders(req: NextRequest): Headers {
+  const origin = req.headers.get('origin') || '';
+  const headers = new Headers();
+  const allowAll = allowedOrigins.includes('*');
+  if (allowAll) {
+    headers.set('Access-Control-Allow-Origin', '*');
+  } else if (origin && allowedOrigins.includes(origin)) {
+    headers.set('Access-Control-Allow-Origin', origin);
+  }
+  headers.set('Vary', 'Origin');
+  headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept');
+  headers.set('Access-Control-Max-Age', '86400');
+  return headers;
+}
+
+function isNonEmptyString(v: unknown): v is string {
+  return typeof v === 'string' && v.trim().length > 0;
+}
+
+function isStringArray(v: unknown): v is string[] {
+  return Array.isArray(v) && v.every((x) => typeof x === 'string');
+}
+
+export async function OPTIONS(req: NextRequest) {
+  return new NextResponse(null, { status: 204, headers: corsHeaders(req) });
+}
+
+export async function GET(req: NextRequest) {
+  const headers = corsHeaders(req);
+  try {
+    const authHeader = req.headers.get('authorization');
+    const user = await getUserFromToken(authHeader);
+    if (!user) {
+      return new NextResponse(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers });
+    }
+
+    await connectDB();
+
+    const { searchParams } = new URL(req.url);
+    const limit = Math.min(parseInt(searchParams.get('limit') || '50', 10), 100);
+    const offset = parseInt(searchParams.get('offset') || '0', 10);
+    const sort = (searchParams.get('sort') || '-createdAt') as string;
+
+    const [items, total] = await Promise.all([
+      CaseModel.find({ userId: user.userId })
+        .sort(sort)
+        .skip(Math.max(offset, 0))
+        .limit(Math.max(limit, 1)),
+      CaseModel.countDocuments({ userId: user.userId }),
+    ]);
+
+    return new NextResponse(
+      JSON.stringify({ items: items.map((x) => x.toJSON()), total, limit, offset }),
+      { status: 200, headers }
+    );
+  } catch (err) {
+    console.error('GET /api/cases error', err);
+    return new NextResponse(JSON.stringify({ error: 'Internal Server Error' }), { status: 500, headers });
+  }
+}
+
+export async function POST(req: NextRequest) {
+  const headers = corsHeaders(req);
+  try {
+    const authHeader = req.headers.get('authorization');
+    const user = await getUserFromToken(authHeader);
+    if (!user) {
+      return new NextResponse(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers });
+    }
+
+    const body = await req.json().catch(() => null as unknown);
+    if (!body || typeof body !== 'object') {
+      return new NextResponse(JSON.stringify({ error: 'Invalid JSON body' }), { status: 400, headers });
+    }
+
+    const { store, product, description, images } = body as Partial<{
+      store: string;
+      product: string;
+      description: string;
+      images: string[];
+    }>;
+
+    if (!isNonEmptyString(store)) {
+      return new NextResponse(JSON.stringify({ error: 'Store is required' }), { status: 400, headers });
+    }
+    if (!isNonEmptyString(product)) {
+      return new NextResponse(JSON.stringify({ error: 'Product is required' }), { status: 400, headers });
+    }
+    if (!isNonEmptyString(description)) {
+      return new NextResponse(JSON.stringify({ error: 'Description is required' }), { status: 400, headers });
+    }
+
+    const normalizedImages = images && isStringArray(images) ? images : [];
+
+    await connectDB();
+
+    const doc = await CaseModel.create({
+      userId: user.userId,
+      userEmail: user.email,
+      store: store.trim(),
+      product: product.trim(),
+      description: description.trim(),
+      images: normalizedImages,
+    });
+
+    // Fire-and-forget email notification so we don't block response
+    setImmediate(async () => {
+      try {
+        const subject = `New case from ${user.email || user.userId}: ${product}`;
+        const bodyLines = [
+          'A new case has been submitted:',
+          '',
+          user.email ? `User email: ${user.email}` : undefined,
+          `User UID: ${user.userId}`,
+          `Store: ${store}`,
+          `Product: ${product}`,
+          description ? `Description: ${description}` : undefined,
+          normalizedImages.length ? `Images: ${normalizedImages.join(', ')}` : undefined,
+          '',
+          `Created at: ${doc.createdAt.toISOString()}`,
+          `ID: ${doc.id}`,
+        ].filter(Boolean);
+        await sendComplaintEmail({ subject, body: bodyLines.join('\n') });
+      } catch (emailErr) {
+        console.error('Background email send failed:', emailErr);
+      }
+    });
+
+    return new NextResponse(JSON.stringify(doc.toJSON()), { status: 201, headers });
+  } catch (err) {
+    console.error('POST /api/cases error', err);
+    return new NextResponse(JSON.stringify({ error: 'Internal Server Error' }), { status: 500, headers });
+  }
+}
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
