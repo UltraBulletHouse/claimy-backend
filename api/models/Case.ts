@@ -9,6 +9,8 @@ export interface CaseDocument extends Document {
   product: string;
   description: string;
   images: string[];
+  productImageUrl?: string | null;
+  receiptImageUrl?: string | null;
   status: CaseStatus;
   createdAt: Date;
   updatedAt: Date;
@@ -43,10 +45,20 @@ const CaseSchema = new Schema<CaseDocument>(
       required: true,
       trim: true
     },
-    images: {
-      type: [String],
-      default: []
-    },
+   images: {
+     type: [String],
+     default: []
+   },
+   productImageUrl: {
+     type: String,
+     default: null,
+     trim: true,
+   },
+   receiptImageUrl: {
+     type: String,
+     default: null,
+     trim: true,
+   },
     status: {
       type: String,
       enum: ['PENDING', 'IN_REVIEW', 'NEED_INFO', 'APPROVED', 'REJECTED'],

@@ -79,12 +79,61 @@ export async function POST(req: NextRequest) {
       return new NextResponse(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers });
     }
 
-    const body = await req.json().catch(() => null as unknown);
-    if (!body || typeof body !== 'object') {
-      return new NextResponse(JSON.stringify({ error: 'Invalid JSON body' }), { status: 400, headers });
-    }
+   const contentType = req.headers.get('content-type') || '';
+   let body: any = null;
+   let uploaded: { productImageUrl?: string | null; receiptImageUrl?: string | null } = {};
 
-    const { store, product, description, images } = body as Partial<{
+   if (contentType.includes('multipart/form-data')) {
+     // Parse formdata and upload images to Cloudinary
+     const formData = await req.formData();
+     const store = formData.get('store')?.toString();
+     const product = formData.get('product')?.toString();
+     const description = formData.get('description')?.toString();
+     const productFile = formData.get('productImage') as File | null;
+     const receiptFile = formData.get('receiptImage') as File | null;
+
+     async function uploadOne(file: File | null, folder: string) {
+       if (!file) return null;
+       const arrayBuffer = await file.arrayBuffer();
+       const buffer = Buffer.from(arrayBuffer);
+       const { v2: cloud } = await import('@/api/lib/cloudinary');
+       // The default export is cloudinary, but to keep type we can use default
+       const cloudinary = (await import('@/api/lib/cloudinary')).default as any;
+       const res = await new Promise<any>((resolve, reject) => {
+         const uploadStream = cloudinary.uploader.upload_stream(
+           {
+             folder,
+             resource_type: 'image',
+             quality: 'auto',
+             fetch_format: 'auto',
+             transformation: [{ quality: 'auto', fetch_format: 'auto' }],
+           },
+           (error: any, result: any) => {
+             if (error) return reject(error);
+             resolve(result);
+           }
+         );
+         uploadStream.end(buffer);
+       });
+       return res?.secure_url as string;
+     }
+
+     const [productImageUrl, receiptImageUrl] = await Promise.all([
+       uploadOne(productFile, `claimy/${user.userId}`),
+       uploadOne(receiptFile, `claimy/${user.userId}`),
+     ]);
+
+     uploaded = { productImageUrl, receiptImageUrl };
+
+     body = { store, product, description, images: [] };
+   } else {
+     body = await req.json().catch(() => null as unknown);
+     if (!body || typeof body !== 'object') {
+       return new NextResponse(JSON.stringify({ error: 'Invalid JSON body' }), { status: 400, headers });
+     }
+   }
+
+   const { store, product, description, images } = body as Partial<{
       store: string;
       product: string;
       description: string;
@@ -105,14 +154,16 @@ export async function POST(req: NextRequest) {
 
     await connectDB();
 
-    const doc = await CaseModel.create({
-      userId: user.userId,
-      userEmail: user.email,
-      store: store.trim(),
-      product: product.trim(),
-      description: description.trim(),
-      images: normalizedImages,
-    });
+   const doc = await CaseModel.create({
+     userId: user.userId,
+     userEmail: user.email,
+     store: store.trim(),
+     product: product.trim(),
+     description: description.trim(),
+     images: normalizedImages,
+     ...(uploaded.productImageUrl ? { productImageUrl: uploaded.productImageUrl } : {}),
+     ...(uploaded.receiptImageUrl ? { receiptImageUrl: uploaded.receiptImageUrl } : {}),
+   });
 
     // Fire-and-forget email notification so we don't block response
     setImmediate(async () => {
