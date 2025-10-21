@@ -56,3 +56,5 @@ firebase-debug.log
 *.pid
 
 .env.local
+claimy-*json
+
