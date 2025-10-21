@@ -28,6 +28,7 @@ coverage/
 .temp/
 .eslintcache
 .stylelintcache
+**next/
 
 # Env files (keep examples)
 .env
