@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/api/lib/db';
 import ComplaintModel from '@/api/models/Complaint';
-import { sendComplaintEmail } from '@/api/lib/gmail';
-
 const allowedOrigins = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim())
   : ['*'];
@@ -82,39 +80,8 @@ export async function POST(req: NextRequest) {
       images: normalizedImages,
     });
 
-    // Prepare email
-    const subject = `New complaint from ${name || email || 'anonymous'}: ${product}`;
-    const bodyLines = [
-      'A new complaint has been submitted:',
-      '',
-      name ? `Name: ${name}` : undefined,
-      email ? `Email: ${email}` : undefined,
-      `Store: ${store}`,
-      `Product: ${product}`,
-      description ? `Description: ${description}` : undefined,
-      normalizedImages.length ? `Images: ${normalizedImages.join(', ')}` : undefined,
-      '',
-      `Created at: ${doc.createdAt.toISOString()}`,
-      `ID: ${doc.id}`,
-    ].filter(Boolean);
-
-    try {
-      await sendComplaintEmail({
-        subject,
-        body: bodyLines.join('\n'),
-      });
-    } catch (emailErr) {
-      console.error('Failed to send email notification:', emailErr);
-      // Continue: we still created the record. Return 207 Multi-Status-like message via payload
-      return new NextResponse(JSON.stringify({
-        ok: true,
-        id: doc.id,
-        emailSent: false,
-        message: 'Complaint saved, but failed to send email notification.'
-      }), { status: 201, headers: corsHeaders(req) });
-    }
-
-    return new NextResponse(JSON.stringify({ ok: true, id: doc.id, emailSent: true }), { status: 201, headers: corsHeaders(req) });
+    // No auto email sending here; admin will handle communications from the admin UI
+    return new NextResponse(JSON.stringify({ ok: true, id: doc.id }), { status: 201, headers: corsHeaders(req) });
   } catch (err) {
     console.error('Unexpected error handling complaint:', err);
     return new NextResponse(JSON.stringify({ error: 'Internal Server Error' }), { status: 500, headers: corsHeaders(req) });

@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/api/lib/db';
 import CaseModel from '@/api/models/Case';
 import { getUserFromToken } from '@/api/lib/auth';
-import { sendComplaintEmail } from '@/api/lib/gmail';
-
 const allowedOrigins = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim())
   : ['*'];
@@ -164,36 +162,6 @@ export async function POST(req: NextRequest) {
      ...(uploaded.productImageUrl ? { productImageUrl: uploaded.productImageUrl } : {}),
      ...(uploaded.receiptImageUrl ? { receiptImageUrl: uploaded.receiptImageUrl } : {}),
    });
-
-    // Fire-and-forget email notification so we don't block response
-    setImmediate(async () => {
-      try {
-        const subject = `New case from ${user.email || user.userId}: ${product}`;
-        const bodyLines = [
-          'A new case has been submitted:',
-          '',
-          user.email ? `User email: ${user.email}` : undefined,
-          `User UID: ${user.userId}`,
-          `Store: ${store}`,
-          `Product: ${product}`,
-          description ? `Description: ${description}` : undefined,
-          normalizedImages.length ? `Images: ${normalizedImages.join(', ')}` : undefined,
-          '',
-          `Created at: ${doc.createdAt.toISOString()}`,
-          `ID: ${doc.id}`,
-        ].filter(Boolean);
-        const emailRes = await sendComplaintEmail({ subject, body: bodyLines.join('\n') });
-        if (emailRes?.threadId && !doc.threadId) {
-          try {
-            await CaseModel.findByIdAndUpdate(doc.id, { threadId: emailRes.threadId });
-          } catch (e) {
-            console.error('Failed to attach threadId to case', e);
-          }
-        }
-      } catch (emailErr) {
-        console.error('Background email send failed:', emailErr);
-      }
-    });
 
     return new NextResponse(JSON.stringify(doc.toJSON()), { status: 201, headers });
   } catch (err) {
