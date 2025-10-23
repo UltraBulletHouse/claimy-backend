@@ -94,8 +94,7 @@ export async function POST(req: NextRequest) {
        if (!file) return null;
        const arrayBuffer = await file.arrayBuffer();
        const buffer = Buffer.from(arrayBuffer);
-       const { v2: cloud } = await import('@/api/lib/cloudinary');
-       // The default export is cloudinary, but to keep type we can use default
+       // The default export from our wrapper is the configured Cloudinary v2 instance
        const cloudinary = (await import('@/api/lib/cloudinary')).default as any;
        const res = await new Promise<any>((resolve, reject) => {
          const uploadStream = cloudinary.uploader.upload_stream(
