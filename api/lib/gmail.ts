@@ -1,11 +1,11 @@
 import { google } from 'googleapis';
 
-const {
-  GOOGLE_CLIENT_ID,
-  GOOGLE_CLIENT_SECRET,
-  GOOGLE_REDIRECT_URI,
-  GMAIL_OAUTH_REFRESH_TOKEN,
-} = process.env;
+const env = process.env as Record<string, string | undefined>;
+const GOOGLE_CLIENT_ID = env.GOOGLE_CLIENT_ID || env.GMAIL_CLIENT_ID;
+const GOOGLE_CLIENT_SECRET = env.GOOGLE_CLIENT_SECRET || env.GMAIL_CLIENT_SECRET;
+const GOOGLE_REDIRECT_URI = env.GOOGLE_REDIRECT_URI || env.GMAIL_REDIRECT_URI;
+const GMAIL_OAUTH_REFRESH_TOKEN = env.GMAIL_OAUTH_REFRESH_TOKEN || env.GMAIL_REFRESH_TOKEN;
+const GMAIL_USER = env.GMAIL_USER || undefined;
 
 export function getOAuth2Client() {
   if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !GOOGLE_REDIRECT_URI || !GMAIL_OAUTH_REFRESH_TOKEN) {
@@ -49,7 +49,7 @@ export async function sendComplaintEmail(params: {
   const oauth2Client = getOAuth2Client();
   const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
 
-  const to = params.to || 'jarothepro@gmail.com';
+  const to = params.to || (GMAIL_USER as string);
   const from = params.from || 'me'; // 'me' tells Gmail API to use the authenticated account
 
   const raw = makeEmail({ to, from, subject: params.subject, body: params.body });
@@ -57,4 +57,75 @@ export async function sendComplaintEmail(params: {
   const id = (res.data.id as string) || null;
   const threadId = (res.data.threadId as string) || null;
   return { id, threadId };
+}
+
+export async function sendEmail({ to, subject, body, attachments, threadId }: { to: string; subject: string; body: string; attachments?: Array<{ filename: string; contentType: string; content: Buffer | string; }>; threadId?: string; }) {
+  const oauth2Client = getOAuth2Client();
+  const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+  const from = 'me';
+
+  // Build MIME message with optional attachments (simple multipart/mixed)
+  const boundary = 'foo_bar_baz_' + Date.now();
+  const headers = [
+    `To: ${to}`,
+    GMAIL_USER ? `From: ${GMAIL_USER}` : 'From: me',
+    `Subject: ${subject}`,
+    'MIME-Version: 1.0',
+  ];
+
+  let mime = '';
+  if (attachments && attachments.length) {
+    headers.push(`Content-Type: multipart/mixed; boundary=${boundary}`);
+    const parts: string[] = [];
+    // Body part
+    parts.push([
+      `--${boundary}`,
+      'Content-Type: text/plain; charset="UTF-8"',
+      '',
+      body,
+    ].join('\r\n'));
+
+    // Attachments
+    for (const a of attachments) {
+      const data = typeof a.content === 'string' ? a.content : Buffer.from(a.content).toString('base64');
+      parts.push([
+        `--${boundary}`,
+        `Content-Type: ${a.contentType}; name="${a.filename}"`,
+        'Content-Transfer-Encoding: base64',
+        `Content-Disposition: attachment; filename="${a.filename}"`,
+        '',
+        data,
+      ].join('\r\n'));
+    }
+    parts.push(`--${boundary}--`);
+    mime = headers.join('\r\n') + '\r\n\r\n' + parts.join('\r\n');
+  } else {
+    headers.push('Content-Type: text/plain; charset="UTF-8"');
+    mime = headers.join('\r\n') + '\r\n\r\n' + body;
+  }
+
+  const raw = Buffer.from(mime).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const res = await gmail.users.messages.send({ userId: 'me', requestBody: { raw, threadId } as any });
+  return { id: res.data.id, threadId: res.data.threadId };
+}
+
+export async function fetchThread(threadId: string) {
+  const oauth2Client = getOAuth2Client();
+  const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+  const res = await gmail.users.threads.get({ userId: 'me', id: threadId });
+  return res.data;
+}
+
+export async function listNewMessages(query?: string) {
+  const oauth2Client = getOAuth2Client();
+  const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+  const list = await gmail.users.messages.list({ userId: 'me', q: query });
+  const messages = list.data.messages || [];
+  const full: any[] = [];
+  for (const m of messages) {
+    if (!m.id) continue;
+    const msg = await gmail.users.messages.get({ userId: 'me', id: m.id });
+    full.push(msg.data);
+  }
+  return full;
 }

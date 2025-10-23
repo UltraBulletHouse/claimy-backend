@@ -13,4 +13,12 @@ cloudinary.config({
   secure: true,
 });
 
+export async function uploadImage(filePath: string) {
+  return cloudinary.uploader.upload(filePath, { folder: 'claimy' });
+}
+
+export async function deleteImage(publicId: string) {
+  return cloudinary.uploader.destroy(publicId);
+}
+
 export default cloudinary;
