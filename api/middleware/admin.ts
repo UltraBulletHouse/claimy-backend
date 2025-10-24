@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import jwt from 'jsonwebtoken';
 import { verifyFirebaseIdToken } from '../lib/firebaseAdmin';
 
 export async function assertAdmin(req: NextRequest): Promise<{ email: string }> {
@@ -10,7 +11,25 @@ export async function assertAdmin(req: NextRequest): Promise<{ email: string }> 
     throw new Response(JSON.stringify({ error: 'Admin not configured' }), { status: 500 });
   }
 
-  if (adminToken !== ADMIN_SECRET_TOKEN) {
+  let sessionEmail: string | null = null;
+
+  if (adminToken && adminToken === ADMIN_SECRET_TOKEN) {
+    sessionEmail = ADMIN_EMAIL;
+  } else if (adminToken) {
+    try {
+      const decoded = jwt.verify(adminToken, ADMIN_SECRET_TOKEN) as jwt.JwtPayload & {
+        email?: string;
+      };
+      if (decoded?.email && decoded.email === ADMIN_EMAIL) {
+        sessionEmail = decoded.email;
+      } else {
+        throw new Error('Invalid admin token email');
+      }
+    } catch (error) {
+      console.warn('Failed to verify admin session token', error);
+      throw new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403 });
+    }
+  } else {
     throw new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403 });
   }
 
@@ -25,5 +44,5 @@ export async function assertAdmin(req: NextRequest): Promise<{ email: string }> 
     throw new Response(JSON.stringify({ error: 'Not admin user' }), { status: 403 });
   }
 
-  return { email: user.email || '' };
+  return { email: user.email || sessionEmail || '' };
 }
