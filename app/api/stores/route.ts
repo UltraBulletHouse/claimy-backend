@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/api/lib/db';
 import { getUserFromToken } from '@/api/lib/auth';
-import StoreModel from '@/api/models/Store';
+import StoreModel, { StoreDocument } from '@/api/models/Store';
 
 const allowedOrigins = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim())
@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
     await connectDB();
 
     const stores = await StoreModel.find().sort({ name: 1 });
-    const items = stores.map((store) => store.toJSON());
+    const items = stores.map(serializeStore);
 
     return new NextResponse(JSON.stringify({ items, total: items.length }), {
       status: 200,
@@ -59,3 +59,11 @@ export async function GET(req: NextRequest) {
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+
+function serializeStore(store: StoreDocument) {
+  const json = store.toJSON();
+  if (!json.secondaryColor) {
+    json.secondaryColor = json.primaryColor;
+  }
+  return json;
+}

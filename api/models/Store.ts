@@ -4,6 +4,7 @@ export interface StoreDocument extends Document {
   storeId: string;
   name: string;
   primaryColor: string;
+  secondaryColor: string;
   email: string;
   createdAt: Date;
   updatedAt: Date;
@@ -23,6 +24,11 @@ const StoreSchema = new Schema<StoreDocument>(
       trim: true,
     },
     primaryColor: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    secondaryColor: {
       type: String,
       required: true,
       trim: true,

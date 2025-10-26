@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/api/lib/db';
-import StoreModel from '@/api/models/Store';
+import StoreModel, { StoreDocument } from '@/api/models/Store';
 import { assertAdmin } from '@/api/middleware/admin';
 
 const allowedOrigins = process.env.CORS_ORIGIN
@@ -73,6 +73,12 @@ function normalizeName(value: unknown): string | null {
   return trimmed ? trimmed : null;
 }
 
+function serializeStore(store: StoreDocument) {
+  const json = store.toJSON();
+  json.secondaryColor = store.secondaryColor ?? null;
+  return json;
+}
+
 export async function GET(req: NextRequest) {
   try {
     const headers = corsHeaders(req);
@@ -80,7 +86,7 @@ export async function GET(req: NextRequest) {
     await connectDB();
 
     const stores = await StoreModel.find().sort({ name: 1 });
-    const items = stores.map((store) => store.toJSON());
+    const items = stores.map(serializeStore);
 
     return NextResponse.json({ items, total: items.length }, { headers });
   } catch (error: any) {
@@ -113,6 +119,7 @@ export async function POST(req: NextRequest) {
     const storeId = normalizeStoreId((payload as any).storeId);
     const name = normalizeName((payload as any).name);
     const primaryColor = normalizeColor((payload as any).primaryColor);
+    const secondaryColor = normalizeColor((payload as any).secondaryColor);
     const email = normalizeEmail((payload as any).email);
 
     if (!storeId) {
@@ -127,6 +134,12 @@ export async function POST(req: NextRequest) {
     if (!primaryColor) {
       return NextResponse.json(
         { error: 'Primary color must be a hex value (for example #FFAA00).' },
+        { status: 400, headers }
+      );
+    }
+    if (!secondaryColor) {
+      return NextResponse.json(
+        { error: 'Secondary color must be a hex value (for example #FFAA00).' },
         { status: 400, headers }
       );
     }
@@ -145,10 +158,11 @@ export async function POST(req: NextRequest) {
       storeId,
       name,
       primaryColor,
+      secondaryColor,
       email
     });
 
-    return NextResponse.json(created.toJSON(), { status: 201, headers });
+    return NextResponse.json(serializeStore(created), { status: 201, headers });
   } catch (error: any) {
     const headers = corsHeaders(req);
     if (error instanceof Response) {

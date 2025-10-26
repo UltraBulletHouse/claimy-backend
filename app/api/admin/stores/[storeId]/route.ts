@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/api/lib/db';
-import StoreModel from '@/api/models/Store';
+import StoreModel, { StoreDocument } from '@/api/models/Store';
 import { assertAdmin } from '@/api/middleware/admin';
 
 const allowedOrigins = process.env.CORS_ORIGIN
@@ -76,6 +76,12 @@ function normalizeName(value: unknown): string | null {
   return trimmed ? trimmed : null;
 }
 
+function serializeStore(store: StoreDocument) {
+  const json = store.toJSON();
+  json.secondaryColor = store.secondaryColor ?? null;
+  return json;
+}
+
 export async function PUT(
   req: NextRequest,
   { params }: { params: { storeId: string } }
@@ -97,6 +103,7 @@ export async function PUT(
     const nextStoreId = normalizeStoreId((payload as any).storeId) ?? undefined;
     const name = normalizeName((payload as any).name);
     const primaryColorValue = (payload as any).primaryColor;
+    const secondaryColorValue = (payload as any).secondaryColor;
     const email = normalizeEmail((payload as any).email) ?? undefined;
 
     const update: Record<string, unknown> = {};
@@ -117,6 +124,17 @@ export async function PUT(
         );
       }
       update.primaryColor = normalizedColor;
+    }
+
+    if (typeof secondaryColorValue !== 'undefined') {
+      const normalizedColor = normalizeColor(secondaryColorValue);
+      if (!normalizedColor) {
+        return NextResponse.json(
+          { error: 'Secondary color must be a hex value (for example #FFAA00).' },
+          { status: 400, headers }
+        );
+      }
+      update.secondaryColor = normalizedColor;
     }
 
     if (typeof (payload as any).email !== 'undefined') {
@@ -157,7 +175,7 @@ export async function PUT(
     Object.assign(current, update);
     await current.save();
 
-    return NextResponse.json(current.toJSON(), { headers });
+    return NextResponse.json(serializeStore(current), { headers });
   } catch (error: any) {
     const headers = corsHeaders(req);
     if (error instanceof Response) {
