@@ -18,7 +18,9 @@ const yoga = createYoga({
     credentials: true,
     methods: ['POST', 'GET', 'OPTIONS']
   },
-  graphqlEndpoint: '/api/graphql'
+  graphqlEndpoint: '/api/graphql',
+  // Ensure the handler signature matches Next.js App Router (Request -> Response)
+  fetchAPI: { Request, Response, Headers }
 });
 
 export { yoga as GET, yoga as POST, yoga as OPTIONS };
