@@ -23,7 +23,15 @@ const yoga = createYoga({
   fetchAPI: { Request, Response, Headers }
 });
 
-export { yoga as GET, yoga as POST, yoga as OPTIONS };
+export async function GET(request: Request) {
+  return yoga.fetch(request);
+}
+export async function POST(request: Request) {
+  return yoga.fetch(request);
+}
+export async function OPTIONS(request: Request) {
+  return yoga.fetch(request);
+}
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
