@@ -43,7 +43,7 @@ const RewardSchema = new Schema<RewardDocument>(
     toJSON: {
       transform: (_doc, ret) => {
         ret.id = ret._id;
-        ret.userId = ret.userId?.toString();
+        (ret as any).userId = ret.userId?.toString();
         delete ret._id;
         delete (ret as any).__v;
         return ret;
