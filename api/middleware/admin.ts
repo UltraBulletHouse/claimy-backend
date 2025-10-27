@@ -6,6 +6,7 @@ export async function assertAdmin(req: NextRequest): Promise<{ email: string }> 
   const adminToken = req.headers.get('authorization')?.split(' ')[1] || req.headers.get('x-admin-token') || '';
   const ADMIN_SECRET_TOKEN = process.env.ADMIN_SECRET_TOKEN;
   const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
+  //empty push
 
   if (!ADMIN_SECRET_TOKEN || !ADMIN_EMAIL) {
     throw new Response(JSON.stringify({ error: 'Admin not configured' }), { status: 500 });
