@@ -45,7 +45,7 @@ const RewardSchema = new Schema<RewardDocument>(
         ret.id = ret._id;
         ret.userId = ret.userId?.toString();
         delete ret._id;
-        delete ret.__v;
+        delete (ret as any).__v;
         return ret;
       }
     }
