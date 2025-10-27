@@ -326,7 +326,7 @@ export async function POST(req: NextRequest) {
       }
       const jwtMod = await import('jsonwebtoken');
       const expiresIn = Number(process.env.ADMIN_SESSION_TTL_SECONDS || '3600');
-      const token = jwtMod.sign({ email: fbUser.email }, ADMIN_SECRET_TOKEN, { expiresIn });
+      const token = jwtMod.sign({ email: fbUser.email }, ADMIN_SECRET_TOKEN, { expiresIn, algorithm: 'HS256' });
       const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
       return NextResponse.json({ token, expiresAt }, { headers });
     }
