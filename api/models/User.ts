@@ -33,7 +33,7 @@ const UserSchema = new Schema<UserDocument>(
         ret.id = ret._id;
         delete ret._id;
         delete (ret as any).__v;
-        delete ret.password;
+        delete (ret as any).password;
         return ret;
       }
     }
