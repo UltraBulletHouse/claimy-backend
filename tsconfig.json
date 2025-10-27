@@ -21,16 +21,16 @@
     "baseUrl": ".",
     "paths": {
       "@/api/*": [
-        "./api/*"
+        "./server/*"
       ],
       "@/lib/*": [
-        "./api/lib/*"
+        "./server/lib/*"
       ],
       "@/models/*": [
-        "./api/models/*"
+        "./server/models/*"
       ],
       "@/graphql/*": [
-        "./api/graphql/*"
+        "./server/graphql/*"
       ]
     },
     "plugins": [
