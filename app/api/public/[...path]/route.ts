@@ -19,7 +19,8 @@ function corsHeaders(req: NextRequest): Headers {
   else if (origin && allowedOrigins.includes(origin)) headers.set('Access-Control-Allow-Origin', origin);
   headers.set('Vary', 'Origin');
   headers.set('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-  headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept');
+  headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, X-Firebase-Authorization, X-Firebase-Token');
+  headers.set('Access-Control-Allow-Credentials', 'true');
   headers.set('Access-Control-Max-Age', '86400');
   return headers;
 }
