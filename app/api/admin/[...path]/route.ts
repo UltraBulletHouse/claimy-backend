@@ -19,7 +19,10 @@ function corsHeaders(req: NextRequest): Headers {
   else if (origin && allowedOrigins.includes(origin)) headers.set('Access-Control-Allow-Origin', origin);
   headers.set('Vary', 'Origin');
   headers.set('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
-  headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, Accept, X-Firebase-Authorization, X-Firebase-Token');
+  headers.set(
+    'Access-Control-Allow-Headers',
+    'Authorization, Content-Type, Accept, X-Firebase-Authorization, X-Firebase-Token, X-Admin-Token, authorization, content-type, accept, x-firebase-authorization, x-firebase-token, x-admin-token'
+  );
   headers.set('Access-Control-Max-Age', '86400');
   return headers;
 }
