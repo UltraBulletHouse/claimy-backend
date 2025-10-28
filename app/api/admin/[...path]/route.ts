@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/api/lib/db';
 import { assertAdmin } from '@/api/middleware/admin';
 import { getAdminSessionSecret } from '@/api/lib/adminSecret';
-import { getAdminEmail } from '@/api/lib/adminConfig';
 import CaseModel from '@/api/models/Case';
 import StoreModel from '@/api/models/Store';
 import { updateCaseStatus } from '@/api/lib/caseUtils';
@@ -305,10 +304,12 @@ export async function POST(req: NextRequest) {
     }
     // /admin/session
     if (seg.length === 1 && seg[0] === 'session') {
-      let adminEmail: string;
+      const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
+      if (!ADMIN_EMAIL) {
+        return NextResponse.json({ error: 'Admin not configured' }, { status: 500, headers });
+      }
       let sessionSecret: Buffer;
       try {
-        adminEmail = getAdminEmail();
         sessionSecret = getAdminSessionSecret();
       } catch (error) {
         console.warn('[admin/session] Failed to load admin session secret', error);
@@ -326,13 +327,13 @@ export async function POST(req: NextRequest) {
         console.warn('[admin/session] Firebase token has no email');
         return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers });
       }
-      if (!fbUser.email || fbUser.email.trim().toLowerCase() !== adminEmail) {
+      if (fbUser.email !== ADMIN_EMAIL) {
         console.warn('[admin/session] Email mismatch', { fbEmail: fbUser.email });
         return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers });
       }
       const jwtMod = await import('jsonwebtoken');
       const expiresIn = Number(process.env.ADMIN_SESSION_TTL_SECONDS || '3600');
-      const token = jwtMod.sign({ email: adminEmail }, sessionSecret, { expiresIn, algorithm: 'HS256' });
+      const token = jwtMod.sign({ email: fbUser.email }, sessionSecret, { expiresIn, algorithm: 'HS256' });
       const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
       return NextResponse.json({ token, expiresAt }, { headers });
     }
