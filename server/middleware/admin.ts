@@ -18,7 +18,7 @@ export async function assertAdmin(req: NextRequest): Promise<{ email: string }> 
     sessionEmail = ADMIN_EMAIL;
   } else if (adminToken) {
     try {
-      const decoded = jwt.verify(adminToken, ADMIN_SECRET_TOKEN) as jwt.JwtPayload & {
+      const decoded = jwt.verify(adminToken, ADMIN_SECRET_TOKEN, { algorithms: ['HS256'] }) as jwt.JwtPayload & {
         email?: string;
       };
       if (decoded?.email && decoded.email === ADMIN_EMAIL) {
