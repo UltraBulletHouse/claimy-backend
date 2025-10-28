@@ -19,8 +19,7 @@ function corsHeaders(req: NextRequest): Headers {
   else if (origin && allowedOrigins.includes(origin)) headers.set('Access-Control-Allow-Origin', origin);
   headers.set('Vary', 'Origin');
   headers.set('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
-  headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, Accept, X-Firebase-Authorization, X-Firebase-Token, X-Admin-Token');
-  headers.set('Access-Control-Allow-Credentials', 'true');
+  headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, Accept, X-Firebase-Authorization, X-Firebase-Token');
   headers.set('Access-Control-Max-Age', '86400');
   return headers;
 }
@@ -301,36 +300,6 @@ export async function POST(req: NextRequest) {
       await updateCaseStatus(seg[1], 'NEED_INFO', 'Requested more info', admin.email);
       return NextResponse.json({ ok: true }, { headers });
     }
-    // /admin/session
-    if (seg.length === 1 && seg[0] === 'session') {
-      const ADMIN_SECRET_TOKEN = process.env.ADMIN_SECRET_TOKEN;
-      const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
-      if (!ADMIN_SECRET_TOKEN || !ADMIN_EMAIL) {
-        return NextResponse.json({ error: 'Admin not configured' }, { status: 500, headers });
-      }
-      // Accept Firebase ID token from Authorization: Bearer <idToken>
-      const fbHeader = req.headers.get('authorization') || req.headers.get('x-firebase-authorization');
-      const { verifyFirebaseIdToken } = await import('@/api/lib/firebaseAdmin');
-      const fbUser = await verifyFirebaseIdToken(fbHeader);
-      if (!fbUser) {
-        console.warn('[admin/session] Invalid Firebase token');
-        return NextResponse.json({ error: 'Invalid Firebase token' }, { status: 401, headers });
-      }
-      if (!fbUser.email) {
-        console.warn('[admin/session] Firebase token has no email');
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers });
-      }
-      if (fbUser.email !== ADMIN_EMAIL) {
-        console.warn('[admin/session] Email mismatch', { fbEmail: fbUser.email });
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers });
-      }
-      const jwtMod = await import('jsonwebtoken');
-      const expiresIn = Number(process.env.ADMIN_SESSION_TTL_SECONDS || '3600');
-      const token = jwtMod.sign({ email: fbUser.email }, ADMIN_SECRET_TOKEN, { expiresIn });
-      const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
-      return NextResponse.json({ token, expiresAt }, { headers });
-    }
-
     // /admin/mail/sync or legacy /admin/sync-mails
     if ((seg.length === 2 && seg[0] === 'mail' && seg[1] === 'sync') || (seg.length === 1 && seg[0] === 'sync-mails')) {
       await connectDB();

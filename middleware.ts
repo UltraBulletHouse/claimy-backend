@@ -13,25 +13,16 @@ export function middleware(req: NextRequest) {
   const res = NextResponse.next();
 
   // Read allowed origins from env; default to *
-  const envAllowed = process.env.CORS_ORIGIN?.split(',').map((s) => s.trim()).filter(Boolean) ?? [];
-  const defaultAllowed = ['https://claimy-admin.vercel.app', 'http://localhost:3000'];
-  const allowed = Array.from(new Set([...envAllowed, ...defaultAllowed]));
+  const allowed = process.env.CORS_ORIGIN?.split(',').map((s) => s.trim()) ?? ['*'];
   const allowAll = allowed.includes('*');
-  const allowOrigin = allowAll ? '*' : (origin && allowed.includes(origin) ? origin : '');
+  const allowOrigin = allowAll ? '*' : (allowed.includes(origin) ? origin : '');
 
   if (allowOrigin) {
     res.headers.set('Access-Control-Allow-Origin', allowOrigin);
   }
   res.headers.set('Vary', 'Origin');
   res.headers.set('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
-  // Echo requested headers for maximum compatibility
-  const requestedHeaders = requestHeaders.get('access-control-request-headers');
-  if (requestedHeaders && requestedHeaders.length > 0) {
-    res.headers.set('Access-Control-Allow-Headers', requestedHeaders);
-  } else {
-    res.headers.set('Access-Control-Allow-Headers', 'content-type, authorization, accept, x-firebase-authorization, x-firebase-token, x-admin-token');
-  }
-  res.headers.set('Access-Control-Allow-Credentials', 'true');
+  res.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept');
   res.headers.set('Access-Control-Max-Age', '86400');
 
   // Handle preflight
