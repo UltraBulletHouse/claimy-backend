@@ -1,34 +1,24 @@
 import { NextRequest } from 'next/server';
 import jwt from 'jsonwebtoken';
 import { verifyFirebaseIdToken } from '../lib/firebaseAdmin';
-import { getAdminSecretRaw, getAdminSessionSecret } from '../lib/adminSecret';
 
 export async function assertAdmin(req: NextRequest): Promise<{ email: string }> {
   const adminToken = req.headers.get('authorization')?.split(' ')[1] || req.headers.get('x-admin-token') || '';
+  const ADMIN_SECRET_TOKEN = process.env.ADMIN_SECRET_TOKEN;
   const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
   //empty push
 
-  if (!ADMIN_EMAIL) {
-    throw new Response(JSON.stringify({ error: 'Admin not configured' }), { status: 500 });
-  }
-
-  let rawSecret: string;
-  let sessionSecret: Buffer;
-  try {
-    rawSecret = getAdminSecretRaw();
-    sessionSecret = getAdminSessionSecret();
-  } catch (error) {
-    console.warn('Failed to load admin session secret', error);
+  if (!ADMIN_SECRET_TOKEN || !ADMIN_EMAIL) {
     throw new Response(JSON.stringify({ error: 'Admin not configured' }), { status: 500 });
   }
 
   let sessionEmail: string | null = null;
 
-  if (adminToken && adminToken === rawSecret) {
+  if (adminToken && adminToken === ADMIN_SECRET_TOKEN) {
     sessionEmail = ADMIN_EMAIL;
   } else if (adminToken) {
     try {
-      const decoded = jwt.verify(adminToken, sessionSecret, { algorithms: ['HS256'] }) as jwt.JwtPayload & {
+      const decoded = jwt.verify(adminToken, ADMIN_SECRET_TOKEN, { algorithms: ['HS256'] }) as jwt.JwtPayload & {
         email?: string;
       };
       if (decoded?.email && decoded.email === ADMIN_EMAIL) {
