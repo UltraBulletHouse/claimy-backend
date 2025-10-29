@@ -56,10 +56,6 @@ export async function sendComplaintEmail(params: {
   const res = await gmail.users.messages.send({ userId: 'me', requestBody: { raw } });
   const id = (res.data.id as string) || null;
   const threadId = (res.data.threadId as string) || null;
-  if (!id) {
-    console.error('[gmail] sendComplaintEmail: Gmail API returned no id', res.data);
-    throw new Error('Gmail send failed: no message id returned');
-  }
   return { id, threadId };
 }
 
@@ -110,10 +106,6 @@ export async function sendEmail({ to, subject, body, attachments, threadId }: { 
 
   const raw = Buffer.from(mime).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   const res = await gmail.users.messages.send({ userId: 'me', requestBody: { raw, threadId } as any });
-  if (!res.data.id) {
-    console.error('[gmail] sendEmail: Gmail API returned no id', res.data);
-    throw new Error('Gmail send failed: no message id returned');
-  }
   return { id: res.data.id, threadId: res.data.threadId };
 }
 
