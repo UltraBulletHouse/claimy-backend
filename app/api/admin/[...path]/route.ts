@@ -259,9 +259,59 @@ export async function POST(req: NextRequest) {
       if (!subject || !textBody) return NextResponse.json({ error: 'subject and body required' }, { status: 400, headers });
       const c = await CaseModel.findById(seg[1]);
       if (!c) return NextResponse.json({ error: 'Not found' }, { status: 404, headers });
-      if (!c.userEmail) return NextResponse.json({ error: 'Case has no userEmail' }, { status: 400, headers });
-      const to = c.userEmail;
-      const result = await sendEmail({ to, subject, body: textBody });
+      // Target email resolution: prefer explicit payload.to, otherwise store email, otherwise error
+      let to: string | null = null;
+      const toRaw: unknown = (payload as any)?.to;
+      if (typeof toRaw === 'string' && toRaw.trim()) {
+        const m = toRaw.match(/<([^>]+)>/);
+        to = (m ? m[1] : toRaw).trim().toLowerCase();
+      }
+      if (!to) {
+        // Try resolving store email by storeId or name (case-insensitive)
+        let storeDoc: any = await StoreModel.findOne({ storeId: c.store }).lean();
+        if (!storeDoc) {
+          const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          storeDoc = await StoreModel.findOne({ name: new RegExp('^' + esc(c.store) + '$', 'i') }).lean();
+        }
+        if (storeDoc?.email) to = String(storeDoc.email).trim().toLowerCase();
+      }
+      if (!to) {
+        console.warn('[admin] email/send could not resolve store email', { caseId: seg[1], store: c.store, toRaw });
+        return NextResponse.json({ error: 'Could not resolve store email for this case' }, { status: 400, headers });
+      }
+      // Build attachments from case if requested
+      const attachProduct: boolean = !!(payload as any)?.attachProduct;
+      const attachReceipt: boolean = !!(payload as any)?.attachReceipt;
+      const attachments: Array<{ filename: string; contentType: string; content: string; }> = [];
+      async function pushFromUrl(url: string | null | undefined, fallbackName: string) {
+        if (!url) return;
+        try {
+          const res = await fetch(url);
+          if (!res.ok) {
+            console.warn('[admin] attachment fetch failed', { url, status: res.status });
+            return;
+          }
+          const contentType = res.headers.get('content-type') || 'application/octet-stream';
+          const arrayBuffer = await res.arrayBuffer();
+          const base64 = Buffer.from(arrayBuffer).toString('base64');
+          const urlObj = new URL(url);
+          const pathname = urlObj.pathname;
+          const nameFromUrl = pathname.split('/').pop() || fallbackName;
+          attachments.push({ filename: nameFromUrl, contentType, content: base64 });
+        } catch (e) {
+          console.warn('[admin] attachment fetch error', { url, error: (e as any)?.message || String(e) });
+        }
+      }
+      if (attachProduct) {
+        await pushFromUrl((c as any).productImageUrl || (Array.isArray(c.images) ? c.images[0] : null), 'product.jpg');
+      }
+      if (attachReceipt) {
+        await pushFromUrl((c as any).receiptImageUrl || (Array.isArray(c.images) ? c.images[1] : null), 'receipt.jpg');
+      }
+
+      console.log('[admin] email/send start', { caseId: seg[1], to, subject, hasBody: !!textBody, attachments: attachments.map(a => ({ filename: a.filename, contentType: a.contentType })) });
+      const result = await sendEmail({ to, subject, body: textBody, attachments: attachments.length ? attachments : undefined });
+      console.log('[admin] email/send success', { caseId: seg[1], messageId: result.id, threadId: result.threadId });
       const emailEntry: any = { subject, body: textBody, to, from: process.env.GMAIL_USER || 'me', sentAt: new Date(), threadId: result.threadId || c.threadId || null };
       c.emails = c.emails || [];
       c.emails.push(emailEntry);
@@ -283,10 +333,135 @@ export async function POST(req: NextRequest) {
       if (!textBody) return NextResponse.json({ error: 'body required' }, { status: 400, headers });
       const c = await CaseModel.findById(seg[1]);
       if (!c) return NextResponse.json({ error: 'Not found' }, { status: 404, headers });
-      if (!c.userEmail) return NextResponse.json({ error: 'Case has no userEmail' }, { status: 400, headers });
-      const res = await sendEmail({ to: c.userEmail, subject: subject || 'Re: case update', body: textBody, threadId: c.threadId || undefined });
+      if (!c.threadId) return NextResponse.json({ error: 'Cannot reply: case has no threadId' }, { status: 400, headers });
+      const providedSubject = (typeof subject === 'string' && subject.trim()) ? subject.trim() : '';
+      let derivedSubject: string | undefined;
+      const fallbackSubject = 'Re: case update';
+
+      // Helper to parse an address from "Name <email>" or raw email
+      const parseAddr = (value?: string | null): string | null => {
+        if (!value) return null;
+        const m = value.match(/<([^>]+)>/);
+        return (m ? m[1] : value).trim().toLowerCase();
+      };
+
+      // 1) If admin explicitly provided a 'to', honor it
+      let to: string | null = null;
+      const toRaw: unknown = (payload as any)?.to;
+      if (typeof toRaw === 'string' && toRaw.trim()) {
+        to = parseAddr(toRaw);
+      }
+
+      // 2) Otherwise, derive target from the latest Gmail thread message (counterparty of our sender)
+      let replyMessageId: string | undefined;
+      let references: string[] | undefined;
+      if (!to) {
+        try {
+          const thr: any = await fetchThread(c.threadId);
+          const messages: any[] = Array.isArray(thr?.messages) ? thr.messages : [];
+          // Sort by internalDate ascending for reference building
+          const sorted = messages
+            .map(m => ({ m, ts: Number(m.internalDate || 0) }))
+            .sort((a, b) => a.ts - b.ts)
+            .map(x => x.m);
+          const latest = sorted[sorted.length - 1];
+          const ourEmail = (process.env.GMAIL_USER || '').trim().toLowerCase() || null;
+          const parseHeader = (h: any[], name: string) => h.find((x: any) => x.name?.toLowerCase() === name.toLowerCase())?.value || undefined;
+          const latestHeaders: any[] = latest?.payload?.headers || [];
+          const latestFrom = parseAddr(parseHeader(latestHeaders, 'From'));
+          const latestTo = parseAddr(parseHeader(latestHeaders, 'To'));
+          // Choose the message we are replying to: prefer last message from other party
+          let replyTargetMsg = latest;
+          for (let i = sorted.length - 1; i >= 0; i--) {
+            const h: any[] = sorted[i]?.payload?.headers || [];
+            const fromVal = parseAddr(parseHeader(h, 'From'));
+            if (ourEmail && fromVal && fromVal !== ourEmail) {
+              replyTargetMsg = sorted[i];
+              break;
+            }
+          }
+          const targetHeaders: any[] = replyTargetMsg?.payload?.headers || [];
+          const header = (name: string) => parseHeader(targetHeaders, name);
+          const fromHdr = header('From');
+          const toHdr = header('To');
+          const fromAddr = parseAddr(fromHdr);
+          const toAddr = parseAddr(toHdr);
+          // Extract Message-Id and References for proper threading
+          const normId = (v?: string) => v ? v.replace(/[<>]/g, '') : undefined;
+          const extractRefs = (v?: string) => v ? v.split(/\s+/).map((r: string) => r.replace(/[<>]/g, '')).filter(Boolean) : undefined;
+          const targetMsgIdRaw = header('Message-Id') || header('Message-ID');
+          const targetRefsRaw = header('References');
+          replyMessageId = normId(targetMsgIdRaw);
+          references = extractRefs(targetRefsRaw);
+          // Always include the referenced target message-id in References chain
+          if (replyMessageId) {
+            const set = new Set([...(references || []), replyMessageId]);
+            references = Array.from(set);
+          }
+          // If the last message was from us, reply to its To; else reply to its From
+          if (ourEmail && latestFrom && latestFrom === ourEmail) to = latestTo || toAddr || null;
+          else to = fromAddr || latestFrom || toAddr || latestTo || null;
+          // Derive subject: use provided subject if present; else use thread subject with single Re: prefix
+          const subjLatest = parseHeader(latestHeaders, 'Subject') || '';
+          const baseSubj = subjLatest.replace(/^(re\s*:\s*)+/i, '').trim();
+          derivedSubject = providedSubject || (baseSubj ? `Re: ${baseSubj}` : fallbackSubject);
+          console.log('[admin] reply derive from thread', { caseId: seg[1], ourEmail, fromAddr, toAddr, chosenTo: to, replyMessageId, references, derivedSubject });
+        } catch (e) {
+          console.warn('[admin] reply failed to fetch/parse thread for recipient derivation', { caseId: seg[1], error: (e as any)?.message || String(e) });
+        }
+      }
+
+      // 3) As a final safety, try store email (never user email)
+      if (!to) {
+        let storeDoc: any = await StoreModel.findOne({ storeId: c.store }).lean();
+        if (!storeDoc) {
+          const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          storeDoc = await StoreModel.findOne({ name: new RegExp('^' + esc(String(c.store)) + '$', 'i') }).lean();
+        }
+        if (storeDoc?.email) to = String(storeDoc.email).trim().toLowerCase();
+      }
+
+      if (!to) {
+        console.warn('[admin] reply could not resolve store email (no user fallback)', { caseId: seg[1], store: c.store });
+        return NextResponse.json({ error: 'Could not resolve store email for this case' }, { status: 400, headers });
+      }
+
+      // Attachments (optional), mirror send endpoint flags
+      const attachProduct: boolean = !!(payload as any)?.attachProduct;
+      const attachReceipt: boolean = !!(payload as any)?.attachReceipt;
+      const attachments: Array<{ filename: string; contentType: string; content: string; }> = [];
+      async function pushFromUrl(url: string | null | undefined, fallbackName: string) {
+        if (!url) return;
+        try {
+          const res = await fetch(url);
+          if (!res.ok) {
+            console.warn('[admin] reply attachment fetch failed', { url, status: res.status });
+            return;
+          }
+          const contentType = res.headers.get('content-type') || 'application/octet-stream';
+          const arrayBuffer = await res.arrayBuffer();
+          const base64 = Buffer.from(arrayBuffer).toString('base64');
+          const urlObj = new URL(url);
+          const pathname = urlObj.pathname;
+          const nameFromUrl = pathname.split('/').pop() || fallbackName;
+          attachments.push({ filename: nameFromUrl, contentType, content: base64 });
+        } catch (e) {
+          console.warn('[admin] reply attachment fetch error', { url, error: (e as any)?.message || String(e) });
+        }
+      }
+      if (attachProduct) {
+        await pushFromUrl((c as any).productImageUrl || (Array.isArray(c.images) ? c.images[0] : null), 'product.jpg');
+      }
+      if (attachReceipt) {
+        await pushFromUrl((c as any).receiptImageUrl || (Array.isArray(c.images) ? c.images[1] : null), 'receipt.jpg');
+      }
+
+      console.log('[admin] reply start', { caseId: seg[1], to, subject: (derivedSubject || providedSubject || fallbackSubject), hasBody: !!textBody, threadId: c.threadId, attachments: attachments.map(a => ({ filename: a.filename, contentType: a.contentType })) });
+      const subjectToSend = derivedSubject || providedSubject || fallbackSubject;
+      const res = await sendEmail({ to, subject: subjectToSend, body: textBody, threadId: c.threadId || undefined, replyMessageId, references, attachments: attachments.length ? attachments : undefined });
+      console.log('[admin] reply success', { caseId: seg[1], messageId: res.id, threadId: res.threadId, subject: subjectToSend });
       c.emails = c.emails || [];
-      c.emails.push({ subject: subject || '', body: textBody, to: c.userEmail, from: process.env.GMAIL_USER || 'me', sentAt: new Date(), threadId: res.threadId || c.threadId || undefined } as any);
+      c.emails.push({ subject: subjectToSend, body: textBody, to, from: process.env.GMAIL_USER || 'me', sentAt: new Date(), threadId: res.threadId || c.threadId || undefined } as any);
       if (!c.threadId && res.threadId) c.threadId = res.threadId;
       await c.save();
       return NextResponse.json({ ok: true }, { headers });
