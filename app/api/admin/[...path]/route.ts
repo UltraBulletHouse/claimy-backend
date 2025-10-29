@@ -265,8 +265,7 @@ export async function POST(req: NextRequest) {
       if (!result.id) {
         return NextResponse.json({ error: 'Gmail did not return a message id. Check Gmail OAuth config.' }, { status: 502, headers });
       }
-      const fromResolved = process.env.GMAIL_USER || (admin?.email ?? 'me');
-      const emailEntry: any = { subject, body: textBody, to, from: fromResolved, sentAt: new Date(), threadId: result.threadId || c.threadId || null };
+      const emailEntry: any = { subject, body: textBody, to, from: process.env.GMAIL_USER || 'me', sentAt: new Date(), threadId: result.threadId || c.threadId || null };
       c.emails = c.emails || [];
       c.emails.push(emailEntry);
       if (!c.threadId && result.threadId) c.threadId = result.threadId;
@@ -293,8 +292,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Gmail did not return a message id. Check Gmail OAuth config.' }, { status: 502, headers });
       }
       c.emails = c.emails || [];
-      const fromResolved = process.env.GMAIL_USER || (admin?.email ?? 'me');
-      c.emails.push({ subject: subject || '', body: textBody, to: c.userEmail, from: fromResolved, sentAt: new Date(), threadId: res.threadId || c.threadId || undefined } as any);
+      c.emails.push({ subject: subject || '', body: textBody, to: c.userEmail, from: process.env.GMAIL_USER || 'me', sentAt: new Date(), threadId: res.threadId || c.threadId || undefined } as any);
       if (!c.threadId && res.threadId) c.threadId = res.threadId;
       await c.save();
       return NextResponse.json({ ok: true }, { headers });

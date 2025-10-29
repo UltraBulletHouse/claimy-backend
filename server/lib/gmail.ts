@@ -21,14 +21,6 @@ export function getOAuth2Client() {
   return oauth2Client;
 }
 
-async function getSenderEmail(gmail: ReturnType<typeof google.gmail>) {
-  if (GMAIL_USER) return GMAIL_USER;
-  const prof = await gmail.users.getProfile({ userId: 'me' });
-  const addr = prof.data.emailAddress;
-  if (!addr) throw new Error('Unable to resolve sender email address');
-  return addr;
-}
-
 function makeEmail({ to, from, subject, body }: { to: string; from: string; subject: string; body: string }) {
   const message = [
     `To: ${to}`,
