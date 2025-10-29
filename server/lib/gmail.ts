@@ -17,7 +17,7 @@ export function getOAuth2Client() {
     gmailUser: !!GMAIL_USER,
   };
   if (!has.clientId || !has.clientSecret || !has.redirectUri || !has.refreshToken) {
-    console.error('[gmail] Missing envs', has);
+    
     throw new Error('Gmail OAuth2 env vars are not fully configured.');
   }
 
@@ -50,7 +50,7 @@ function makeEmail({ to, from, subject, body }: { to: string; from: string; subj
 }
 
 export async function sendComplaintEmail(params: { to?: string; from?: string; subject: string; body: string; }) {
-  console.log('[gmail] sendComplaintEmail called', { to: params.to, subject: params.subject, hasBody: !!params.body });
+  
   const oauth2Client = getOAuth2Client();
   const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
 
@@ -59,7 +59,7 @@ export async function sendComplaintEmail(params: { to?: string; from?: string; s
     try {
       const prof = await gmail.users.getProfile({ userId: 'me' });
       GMAIL_PROFILE_EMAIL = prof.data.emailAddress || null;
-      console.log('[gmail] profile', { email: GMAIL_PROFILE_EMAIL });
+      
     } catch (e) {
       console.warn('[gmail] failed to fetch profile');
     }
@@ -69,16 +69,16 @@ export async function sendComplaintEmail(params: { to?: string; from?: string; s
   const from = params.from || 'me'; // 'me' tells Gmail API to use the authenticated account
 
   const raw = makeEmail({ to, from, subject: params.subject, body: params.body });
-  console.log('[gmail] sendComplaintEmail raw headers', { to, from, subject: params.subject, fromHeader: GMAIL_USER || 'me' });
+  
   const res = await gmail.users.messages.send({ userId: 'me', requestBody: { raw } });
   const id = (res.data.id as string) || null;
   const threadId = (res.data.threadId as string) || null;
-  console.log('[gmail] sendComplaintEmail success', { id, threadId });
+  
   return { id, threadId };
 }
 
 export async function sendEmail({ to, subject, body, attachments, threadId, replyMessageId, references }: { to: string; subject: string; body: string; attachments?: Array<{ filename: string; contentType: string; content: Buffer | string; }>; threadId?: string; replyMessageId?: string; references?: string[]; }) {
-  console.log('[gmail] sendEmail called', { to, subject, hasBody: !!body, attachmentsCount: attachments?.length || 0, threadId, hasReplyHeaders: !!replyMessageId || (references && references.length > 0) });
+  
   const oauth2Client = getOAuth2Client();
   const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
   const from = 'me';
@@ -128,12 +128,12 @@ export async function sendEmail({ to, subject, body, attachments, threadId, repl
   const raw = Buffer.from(mime).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   try {
     const res = await gmail.users.messages.send({ userId: 'me', requestBody: { raw, threadId } as any });
-    console.log('[gmail] sendEmail success', { id: res.data.id, threadId: res.data.threadId });
+    
     return { id: res.data.id, threadId: res.data.threadId };
   } catch (err: any) {
     // Log the google error details if present
     const details = err?.errors || err?.response?.data || err?.message || err;
-    console.error('[gmail] sendEmail failed', details);
+    
     throw err;
   }
 }
