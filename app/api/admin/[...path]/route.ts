@@ -329,7 +329,14 @@ export async function POST(req: NextRequest) {
         if (!c) continue;
         matched++;
         c.emails = c.emails || [];
-        c.emails.push({ subject: subject || '', body: '', to: to || '', from: from || '', sentAt: date ? new Date(date) : new Date(), threadId });
+        const parsedFrom = from ? ((from.match(/<([^>]+)>/)?.[1] || from).trim()) : null;
+        const parsedTo = to ? ((to.match(/<([^>]+)>/)?.[1] || to).trim()) : null;
+        if (!parsedFrom || !parsedTo) {
+          console.warn('[mail sync] Skipping message with missing From/To headers', { from, to, threadId });
+          continue;
+        }
+        const sentAt = date ? new Date(date) : new Date();
+        c.emails.push({ subject: subject || '', body: '', to: parsedTo, from: parsedFrom, sentAt, threadId });
         if (!c.threadId && threadId) c.threadId = threadId;
         await c.save();
       }
