@@ -146,6 +146,68 @@ export async function POST(req: NextRequest) {
       });
       return NextResponse.json(doc.toJSON(), { status: 201, headers });
     }
+    // /public/cases/:id/info-response
+    if (seg.length === 3 && seg[0] === 'cases' && seg[2] === 'info-response') {
+      const authHeader = req.headers.get('authorization');
+      const user = await getUserFromToken(authHeader);
+      if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401, headers });
+
+      const caseId = seg[1];
+      await connectDB();
+      const existing = await CaseModel.findOne({ _id: caseId, userId: user.userId });
+      if (!existing) {
+        return NextResponse.json({ error: 'Case not found' }, { status: 404, headers });
+      }
+
+      const contentType = req.headers.get('content-type') || '';
+      let answer: string | undefined;
+      let uploadedUrl: string | null = null;
+
+      if (contentType.includes('multipart/form-data')) {
+        const formData = await req.formData();
+        answer = formData.get('answer')?.toString() || undefined;
+        const file = formData.get('attachment') as File | null;
+        if (file) {
+          const arrayBuffer = await file.arrayBuffer();
+          const buffer = Buffer.from(arrayBuffer);
+          const result = await new Promise<any>((resolve, reject) => {
+            const uploadStream = cloudinary.uploader.upload_stream(
+              {
+                folder: `claimy/${user.userId}/info-responses`,
+                resource_type: 'image',
+                quality: 'auto',
+                fetch_format: 'auto',
+                transformation: [{ quality: 'auto', fetch_format: 'auto' }],
+              },
+              (error, res) => (error ? reject(error) : resolve(res))
+            );
+            uploadStream.end(buffer);
+          });
+          uploadedUrl = result?.secure_url || null;
+        }
+      } else {
+        const body = await req.json().catch(() => null as unknown);
+        if (!body || typeof body !== 'object') {
+          return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400, headers });
+        }
+        answer = (body as any).answer?.toString();
+      }
+
+      const now = new Date();
+      existing.infoResponse = {
+        answer: answer || undefined,
+        fileUrl: uploadedUrl ?? null,
+        submittedAt: now,
+      } as any;
+      existing.status = 'IN_REVIEW';
+      existing.statusHistory = [
+        ...(existing.statusHistory || []),
+        { status: 'IN_REVIEW', by: user.email || user.userId, at: now, note: 'User provided additional information' },
+      ];
+      await existing.save();
+      return NextResponse.json(existing.toJSON(), { status: 200, headers });
+    }
+
     // /public/uploads
     if (seg.length === 1 && seg[0] === 'uploads') {
       const authHeader = req.headers.get('authorization');
