@@ -317,7 +317,11 @@ export async function POST(req: NextRequest) {
       c.emails.push(emailEntry);
       if (!c.threadId && result.threadId) c.threadId = result.threadId;
       await c.save();
-      return NextResponse.json({ ok: true, messageId: result.id, threadId: c.threadId }, { headers });
+      // Set status to IN_REVIEW when an email is sent to the shop
+      await updateCaseStatus(seg[1], 'IN_REVIEW', 'Email sent to shop', admin.email);
+      // Return updated case so the UI reflects the status change immediately
+      const fresh = await CaseModel.findById(seg[1]);
+      return NextResponse.json(fresh, { headers });
     }
     // /admin/cases/:id/reject
     if (seg.length === 3 && seg[0] === 'cases' && seg[2] === 'reject') {

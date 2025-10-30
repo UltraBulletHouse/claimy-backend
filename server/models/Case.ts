@@ -28,6 +28,9 @@ export interface CaseManualAnalysis {
   updatedAt: Date;
 }
 
+export interface CaseInfoRequest { message: string; requiresFile?: boolean; requestedAt: Date; }
+export interface CaseInfoResponse { answer?: string; fileUrl?: string | null; submittedAt: Date; }
+
 export interface CaseDocument extends Document {
   userId: string; // Firebase UID
   userEmail?: string | null;
@@ -44,6 +47,8 @@ export interface CaseDocument extends Document {
   emails?: CaseEmailEntry[];
   resolution?: CaseResolution | null;
   statusHistory?: CaseStatusHistoryEntry[];
+  infoRequest?: CaseInfoRequest | null;
+  infoResponse?: CaseInfoResponse | null;
   threadId?: string | null;
   lastEmailReplyAt?: Date | null;
   lastEmailMessageId?: string | null;
@@ -125,6 +130,22 @@ const CaseSchema = new Schema<CaseDocument>(
         code: { type: String, default: undefined },
         addedAt: { type: Date, default: undefined },
       },
+      default: null,
+    },
+    infoRequest: {
+      type: new Schema<CaseInfoRequest>({
+        message: { type: String, required: true },
+        requiresFile: { type: Boolean, default: false },
+        requestedAt: { type: Date, required: true },
+      }, { _id: false }),
+      default: null,
+    },
+    infoResponse: {
+      type: new Schema<CaseInfoResponse>({
+        answer: { type: String, default: undefined },
+        fileUrl: { type: String, default: null },
+        submittedAt: { type: Date, required: true },
+      }, { _id: false }),
       default: null,
     },
     statusHistory: {
