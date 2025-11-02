@@ -473,14 +473,40 @@ export async function POST(req: NextRequest) {
     // /admin/cases/:id/request-info
     if (seg.length === 3 && seg[0] === 'cases' && seg[2] === 'request-info') {
       await connectDB();
-      const { message } = await req.json();
-      if (!isNonEmptyString(message)) return NextResponse.json({ error: 'message required' }, { status: 400, headers });
+      const payload = await req.json().catch(() => null as unknown);
+      const message = (payload && typeof payload === 'object' && typeof (payload as any).message === 'string')
+        ? (payload as any).message.trim()
+        : '';
+      const requiresFile = !!(payload as any)?.requiresFile;
+
+      if (!message) {
+        return NextResponse.json({ error: 'message required' }, { status: 400, headers });
+      }
+
       const c = await CaseModel.findById(seg[1]);
       if (!c) return NextResponse.json({ error: 'Not found' }, { status: 404, headers });
       if (!c.userEmail) return NextResponse.json({ error: 'Case has no userEmail' }, { status: 400, headers });
-      await sendEmail({ to: c.userEmail, subject: 'Need more information for your case', body: message, threadId: c.threadId || undefined });
-      await updateCaseStatus(seg[1], 'NEED_INFO', 'Requested more info', admin.email);
-      return NextResponse.json({ ok: true }, { headers });
+
+      // Email the user about the info request (keep in thread if possible)
+      await sendEmail({
+        to: c.userEmail,
+        subject: 'Need more information for your case',
+        body: message,
+        threadId: c.threadId || undefined,
+      });
+
+      // Persist infoRequest and clear any previous response
+      const now = new Date();
+      (c as any).infoRequest = { message, requiresFile, requestedAt: now };
+      (c as any).infoResponse = null;
+      await c.save();
+
+      // Update status to NEED_INFO with message as note for timeline
+      await updateCaseStatus(seg[1], 'NEED_INFO', message, admin.email);
+
+      // Return updated case so admin UI refreshes its "Current request to user" panel
+      const fresh = await CaseModel.findById(seg[1]);
+      return NextResponse.json(fresh, { headers });
     }
     // /admin/mail/sync or legacy /admin/sync-mails
     if ((seg.length === 2 && seg[0] === 'mail' && seg[1] === 'sync') || (seg.length === 1 && seg[0] === 'sync-mails')) {
