@@ -85,8 +85,8 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: 'Case not found' }, { status: 404, headers });
       }
 
-      const requestHistory = existing.infoRequestHistory || [];
-      const responseHistory = existing.infoResponseHistory || [];
+      const requestHistory = existing.infoRequestHistory ?? [];
+      const responseHistory = existing.infoResponseHistory ?? [];
 
       // Filter pending requests and check if they have responses
       const pending = requestHistory
@@ -233,10 +233,15 @@ export async function POST(req: NextRequest) {
         answer = (body as any).answer?.toString();
       }
 
+      // Initialize history arrays if they don't exist
+      if (!existing.infoRequestHistory) {
+        (existing as any).infoRequestHistory = [];
+      }
+
       // Validate requestId exists if provided, otherwise use latest pending request
       if (!requestId) {
         // Find the most recent pending request
-        const pendingRequests = (existing.infoRequestHistory || []).filter((r: any) => r.status === 'PENDING');
+        const pendingRequests = existing.infoRequestHistory.filter((r: any) => r.status === 'PENDING');
         if (pendingRequests.length > 0) {
           // Sort by requestedAt descending and take the first
           pendingRequests.sort((a: any, b: any) => b.requestedAt.getTime() - a.requestedAt.getTime());
@@ -247,7 +252,7 @@ export async function POST(req: NextRequest) {
       }
 
       // Verify requestId exists in history
-      const request = (existing.infoRequestHistory || []).find((r: any) => r.id === requestId);
+      const request = existing.infoRequestHistory.find((r: any) => r.id === requestId);
       if (!request) {
         return NextResponse.json({ error: 'Invalid requestId' }, { status: 400, headers });
       }
@@ -256,6 +261,14 @@ export async function POST(req: NextRequest) {
       const { randomUUID } = await import('crypto');
       const responseId = randomUUID();
       const now = new Date();
+
+      // Initialize history arrays if they don't exist
+      if (!existing.infoRequestHistory) {
+        (existing as any).infoRequestHistory = [];
+      }
+      if (!existing.infoResponseHistory) {
+        (existing as any).infoResponseHistory = [];
+      }
 
       // Add response to history
       const newResponse = {
@@ -269,17 +282,12 @@ export async function POST(req: NextRequest) {
         submittedBy: user.email || user.userId,
       };
 
-      if (!existing.infoResponseHistory) {
-        (existing as any).infoResponseHistory = [];
-      }
       existing.infoResponseHistory.push(newResponse as any);
 
       // Update request status to ANSWERED
-      if (existing.infoRequestHistory) {
-        existing.infoRequestHistory = existing.infoRequestHistory.map((r: any) => 
-          r.id === requestId ? { ...r, status: 'ANSWERED' } : r
-        ) as any;
-      }
+      existing.infoRequestHistory = existing.infoRequestHistory.map((r: any) => 
+        r.id === requestId ? { ...r, status: 'ANSWERED' } : r
+      ) as any;
 
       // Update legacy fields for backward compatibility
       existing.infoResponse = {

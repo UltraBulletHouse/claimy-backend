@@ -313,7 +313,7 @@ export async function POST(req: NextRequest) {
       const attachInfoFiles: string[] = Array.isArray((payload as any)?.attachInfoFiles) 
         ? (payload as any).attachInfoFiles 
         : [];
-      if (attachInfoFiles.length > 0 && c.infoResponseHistory) {
+      if (attachInfoFiles.length > 0 && c.infoResponseHistory && c.infoResponseHistory.length > 0) {
         for (const responseId of attachInfoFiles) {
           const response = c.infoResponseHistory.find((r: any) => r.id === responseId);
           if (response && response.fileUrl) {
@@ -507,8 +507,16 @@ export async function POST(req: NextRequest) {
       const requestId = randomUUID();
       const now = new Date();
 
+      // Initialize history arrays if they don't exist
+      if (!c.infoRequestHistory) {
+        (c as any).infoRequestHistory = [];
+      }
+      if (!c.infoResponseHistory) {
+        (c as any).infoResponseHistory = [];
+      }
+
       // If supersedePrevious, mark all PENDING requests as SUPERSEDED
-      if (supersedePrevious && c.infoRequestHistory && c.infoRequestHistory.length > 0) {
+      if (supersedePrevious && c.infoRequestHistory.length > 0) {
         c.infoRequestHistory = c.infoRequestHistory.map((req: any) => ({
           ...req,
           status: req.status === 'PENDING' ? 'SUPERSEDED' : req.status,
@@ -525,9 +533,6 @@ export async function POST(req: NextRequest) {
         status: 'PENDING' as const,
       };
       
-      if (!c.infoRequestHistory) {
-        (c as any).infoRequestHistory = [];
-      }
       c.infoRequestHistory.push(newRequest as any);
 
       // Update legacy fields for backward compatibility
@@ -560,8 +565,9 @@ export async function POST(req: NextRequest) {
       const c = await CaseModel.findById(seg[1]);
       if (!c) return NextResponse.json({ error: 'Not found' }, { status: 404, headers });
 
-      const requestHistory = c.infoRequestHistory || [];
-      const responseHistory = c.infoResponseHistory || [];
+      // Initialize arrays if they don't exist
+      const requestHistory = c.infoRequestHistory ?? [];
+      const responseHistory = c.infoResponseHistory ?? [];
 
       // Join requests with their responses
       const requests = requestHistory.map((req: any) => {
