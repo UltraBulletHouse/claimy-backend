@@ -72,6 +72,36 @@ export async function GET(req: NextRequest) {
       ]);
       return NextResponse.json({ items: items.map(x => x.toJSON()), total, limit, offset }, { headers });
     }
+    // /public/cases/:id/info-requests
+    if (seg.length === 3 && seg[0] === 'cases' && seg[2] === 'info-requests') {
+      const authHeader = req.headers.get('authorization');
+      const user = await getUserFromToken(authHeader);
+      if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401, headers });
+
+      const caseId = seg[1];
+      await connectDB();
+      const existing = await CaseModel.findOne({ _id: caseId, userId: user.userId });
+      if (!existing) {
+        return NextResponse.json({ error: 'Case not found' }, { status: 404, headers });
+      }
+
+      const requestHistory = existing.infoRequestHistory || [];
+      const responseHistory = existing.infoResponseHistory || [];
+
+      // Filter pending requests and check if they have responses
+      const pending = requestHistory
+        .filter((req: any) => req.status === 'PENDING')
+        .map((req: any) => ({
+          id: req.id,
+          message: req.message,
+          requiresFile: req.requiresFile,
+          requestedAt: req.requestedAt.toISOString(),
+          hasResponse: responseHistory.some((res: any) => res.requestId === req.id),
+        }));
+
+      return NextResponse.json({ pending }, { headers });
+    }
+    
     // /public/checkReplies
     if (seg.length === 1 && seg[0] === 'checkReplies') {
       const res = await checkGmailReplies();
@@ -160,24 +190,33 @@ export async function POST(req: NextRequest) {
       }
 
       const contentType = req.headers.get('content-type') || '';
+      let requestId: string | undefined;
       let answer: string | undefined;
       let uploadedUrl: string | null = null;
+      let fileName: string | undefined;
+      let fileType: string | undefined;
 
       if (contentType.includes('multipart/form-data')) {
         const formData = await req.formData();
+        requestId = formData.get('requestId')?.toString();
         answer = formData.get('answer')?.toString() || undefined;
         const file = formData.get('attachment') as File | null;
         if (file) {
+          // Generate unique response ID for folder organization
+          const { randomUUID } = await import('crypto');
+          const responseId = randomUUID();
+          
+          fileName = file.name;
+          fileType = file.type;
           const arrayBuffer = await file.arrayBuffer();
           const buffer = Buffer.from(arrayBuffer);
           const result = await new Promise<any>((resolve, reject) => {
             const uploadStream = cloudinary.uploader.upload_stream(
               {
-                folder: `claimy/${user.userId}/info-responses`,
-                resource_type: 'image',
+                folder: `claimy/${user.userId}/info-responses/${responseId}`,
+                resource_type: 'auto',
                 quality: 'auto',
                 fetch_format: 'auto',
-                transformation: [{ quality: 'auto', fetch_format: 'auto' }],
               },
               (error, res) => (error ? reject(error) : resolve(res))
             );
@@ -190,22 +229,72 @@ export async function POST(req: NextRequest) {
         if (!body || typeof body !== 'object') {
           return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400, headers });
         }
+        requestId = (body as any).requestId?.toString();
         answer = (body as any).answer?.toString();
       }
 
+      // Validate requestId exists if provided, otherwise use latest pending request
+      if (!requestId) {
+        // Find the most recent pending request
+        const pendingRequests = (existing.infoRequestHistory || []).filter((r: any) => r.status === 'PENDING');
+        if (pendingRequests.length > 0) {
+          // Sort by requestedAt descending and take the first
+          pendingRequests.sort((a: any, b: any) => b.requestedAt.getTime() - a.requestedAt.getTime());
+          requestId = pendingRequests[0].id;
+        } else {
+          return NextResponse.json({ error: 'No pending info request found' }, { status: 400, headers });
+        }
+      }
+
+      // Verify requestId exists in history
+      const request = (existing.infoRequestHistory || []).find((r: any) => r.id === requestId);
+      if (!request) {
+        return NextResponse.json({ error: 'Invalid requestId' }, { status: 400, headers });
+      }
+
+      // Generate response ID
+      const { randomUUID } = await import('crypto');
+      const responseId = randomUUID();
       const now = new Date();
+
+      // Add response to history
+      const newResponse = {
+        id: responseId,
+        requestId: requestId,
+        answer: answer || undefined,
+        fileUrl: uploadedUrl ?? null,
+        fileName: fileName || undefined,
+        fileType: fileType || undefined,
+        submittedAt: now,
+        submittedBy: user.email || user.userId,
+      };
+
+      if (!existing.infoResponseHistory) {
+        (existing as any).infoResponseHistory = [];
+      }
+      existing.infoResponseHistory.push(newResponse as any);
+
+      // Update request status to ANSWERED
+      if (existing.infoRequestHistory) {
+        existing.infoRequestHistory = existing.infoRequestHistory.map((r: any) => 
+          r.id === requestId ? { ...r, status: 'ANSWERED' } : r
+        ) as any;
+      }
+
+      // Update legacy fields for backward compatibility
       existing.infoResponse = {
         answer: answer || undefined,
         fileUrl: uploadedUrl ?? null,
         submittedAt: now,
       } as any;
+
       existing.status = 'IN_REVIEW';
       existing.statusHistory = [
         ...(existing.statusHistory || []),
         { status: 'IN_REVIEW', by: user.email || user.userId, at: now, note: 'User provided additional information' },
       ];
       await existing.save();
-      return NextResponse.json(existing.toJSON(), { status: 200, headers });
+      return NextResponse.json({ responseId, case: existing.toJSON() }, { status: 200, headers });
     }
 
     // /public/uploads

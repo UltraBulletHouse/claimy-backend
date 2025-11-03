@@ -308,6 +308,20 @@ export async function POST(req: NextRequest) {
       if (attachReceipt) {
         await pushFromUrl((c as any).receiptImageUrl || (Array.isArray(c.images) ? c.images[1] : null), 'receipt.jpg');
       }
+      
+      // NEW: Attach files from info response history
+      const attachInfoFiles: string[] = Array.isArray((payload as any)?.attachInfoFiles) 
+        ? (payload as any).attachInfoFiles 
+        : [];
+      if (attachInfoFiles.length > 0 && c.infoResponseHistory) {
+        for (const responseId of attachInfoFiles) {
+          const response = c.infoResponseHistory.find((r: any) => r.id === responseId);
+          if (response && response.fileUrl) {
+            const fileName = response.fileName || `user-file-${responseId.substring(0, 8)}.jpg`;
+            await pushFromUrl(response.fileUrl, fileName);
+          }
+        }
+      }
 
       console.log('[admin] email/send start', { caseId: seg[1], to, subject, hasBody: !!textBody, attachments: attachments.map(a => ({ filename: a.filename, contentType: a.contentType })) });
       const result = await sendEmail({ to, subject, body: textBody, attachments: attachments.length ? attachments : undefined });
@@ -478,6 +492,7 @@ export async function POST(req: NextRequest) {
         ? (payload as any).message.trim()
         : '';
       const requiresFile = !!(payload as any)?.requiresFile;
+      const supersedePrevious = !!(payload as any)?.supersedePrevious;
 
       if (!message) {
         return NextResponse.json({ error: 'message required' }, { status: 400, headers });
@@ -487,6 +502,42 @@ export async function POST(req: NextRequest) {
       if (!c) return NextResponse.json({ error: 'Not found' }, { status: 404, headers });
       if (!c.userEmail) return NextResponse.json({ error: 'Case has no userEmail' }, { status: 400, headers });
 
+      // Generate unique request ID
+      const { randomUUID } = await import('crypto');
+      const requestId = randomUUID();
+      const now = new Date();
+
+      // If supersedePrevious, mark all PENDING requests as SUPERSEDED
+      if (supersedePrevious && c.infoRequestHistory && c.infoRequestHistory.length > 0) {
+        c.infoRequestHistory = c.infoRequestHistory.map((req: any) => ({
+          ...req,
+          status: req.status === 'PENDING' ? 'SUPERSEDED' : req.status,
+        }));
+      }
+
+      // Add new request to history
+      const newRequest = {
+        id: requestId,
+        message,
+        requiresFile,
+        requestedAt: now,
+        requestedBy: admin.email,
+        status: 'PENDING' as const,
+      };
+      
+      if (!c.infoRequestHistory) {
+        (c as any).infoRequestHistory = [];
+      }
+      c.infoRequestHistory.push(newRequest as any);
+
+      // Update legacy fields for backward compatibility
+      (c as any).infoRequest = { message, requiresFile, requestedAt: now };
+      if (supersedePrevious) {
+        (c as any).infoResponse = null;
+      }
+
+      await c.save();
+
       // Email the user about the info request (keep in thread if possible)
       await sendEmail({
         to: c.userEmail,
@@ -495,19 +546,50 @@ export async function POST(req: NextRequest) {
         threadId: c.threadId || undefined,
       });
 
-      // Persist infoRequest and clear any previous response
-      const now = new Date();
-      (c as any).infoRequest = { message, requiresFile, requestedAt: now };
-      (c as any).infoResponse = null;
-      await c.save();
-
       // Update status to NEED_INFO with message as note for timeline
       await updateCaseStatus(seg[1], 'NEED_INFO', message, admin.email);
 
-      // Return updated case so admin UI refreshes its "Current request to user" panel
+      // Return updated case with requestId
       const fresh = await CaseModel.findById(seg[1]);
-      return NextResponse.json(fresh, { headers });
+      return NextResponse.json({ requestId, case: fresh }, { headers });
     }
+    
+    // /admin/cases/:id/info-history
+    if (seg.length === 3 && seg[0] === 'cases' && seg[2] === 'info-history') {
+      await connectDB();
+      const c = await CaseModel.findById(seg[1]);
+      if (!c) return NextResponse.json({ error: 'Not found' }, { status: 404, headers });
+
+      const requestHistory = c.infoRequestHistory || [];
+      const responseHistory = c.infoResponseHistory || [];
+
+      // Join requests with their responses
+      const requests = requestHistory.map((req: any) => {
+        const response = responseHistory.find((res: any) => res.requestId === req.id);
+        return {
+          id: req.id,
+          message: req.message,
+          requiresFile: req.requiresFile,
+          requestedAt: req.requestedAt.toISOString(),
+          requestedBy: req.requestedBy,
+          status: req.status,
+          response: response ? {
+            id: response.id,
+            answer: response.answer,
+            fileUrl: response.fileUrl,
+            fileName: response.fileName,
+            submittedAt: response.submittedAt.toISOString(),
+          } : undefined,
+        };
+      });
+
+      return NextResponse.json({
+        requests,
+        totalRequests: requestHistory.length,
+        totalResponses: responseHistory.length,
+      }, { headers });
+    }
+    
     // /admin/mail/sync or legacy /admin/sync-mails
     if ((seg.length === 2 && seg[0] === 'mail' && seg[1] === 'sync') || (seg.length === 1 && seg[0] === 'sync-mails')) {
       await connectDB();

@@ -2,6 +2,8 @@ import { Schema, model, models, Document, Model } from 'mongoose';
 
 export type CaseStatus = 'PENDING' | 'IN_REVIEW' | 'NEED_INFO' | 'APPROVED' | 'REJECTED';
 
+export type InfoRequestStatus = 'PENDING' | 'ANSWERED' | 'SUPERSEDED';
+
 export interface CaseEmailEntry {
   subject: string;
   body: string;
@@ -28,6 +30,28 @@ export interface CaseManualAnalysis {
   updatedAt: Date;
 }
 
+// NEW: History tracking interfaces
+export interface CaseInfoRequestHistoryEntry {
+  id: string;
+  message: string;
+  requiresFile: boolean;
+  requestedAt: Date;
+  requestedBy: string;
+  status: InfoRequestStatus;
+}
+
+export interface CaseInfoResponseHistoryEntry {
+  id: string;
+  requestId: string;
+  answer?: string;
+  fileUrl?: string | null;
+  fileName?: string;
+  fileType?: string;
+  submittedAt: Date;
+  submittedBy: string;
+}
+
+// Legacy interfaces - kept for backward compatibility
 export interface CaseInfoRequest { message: string; requiresFile?: boolean; requestedAt: Date; }
 export interface CaseInfoResponse { answer?: string; fileUrl?: string | null; submittedAt: Date; }
 
@@ -47,6 +71,10 @@ export interface CaseDocument extends Document {
   emails?: CaseEmailEntry[];
   resolution?: CaseResolution | null;
   statusHistory?: CaseStatusHistoryEntry[];
+  // NEW: History arrays
+  infoRequestHistory?: CaseInfoRequestHistoryEntry[];
+  infoResponseHistory?: CaseInfoResponseHistoryEntry[];
+  // Legacy fields - kept for backward compatibility
   infoRequest?: CaseInfoRequest | null;
   infoResponse?: CaseInfoResponse | null;
   threadId?: string | null;
@@ -131,6 +159,40 @@ const CaseSchema = new Schema<CaseDocument>(
         addedAt: { type: Date, default: undefined },
       },
       default: null,
+    },
+    infoRequestHistory: {
+      type: [
+        new Schema<CaseInfoRequestHistoryEntry>(
+          {
+            id: { type: String, required: true },
+            message: { type: String, required: true },
+            requiresFile: { type: Boolean, default: false },
+            requestedAt: { type: Date, required: true },
+            requestedBy: { type: String, required: true },
+            status: { type: String, enum: ['PENDING', 'ANSWERED', 'SUPERSEDED'], default: 'PENDING' },
+          },
+          { _id: false }
+        ),
+      ],
+      default: [],
+    },
+    infoResponseHistory: {
+      type: [
+        new Schema<CaseInfoResponseHistoryEntry>(
+          {
+            id: { type: String, required: true },
+            requestId: { type: String, required: true },
+            answer: { type: String, default: undefined },
+            fileUrl: { type: String, default: null },
+            fileName: { type: String, default: undefined },
+            fileType: { type: String, default: undefined },
+            submittedAt: { type: Date, required: true },
+            submittedBy: { type: String, required: true },
+          },
+          { _id: false }
+        ),
+      ],
+      default: [],
     },
     infoRequest: {
       type: new Schema<CaseInfoRequest>({
