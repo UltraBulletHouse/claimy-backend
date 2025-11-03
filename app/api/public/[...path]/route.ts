@@ -241,7 +241,7 @@ export async function POST(req: NextRequest) {
       // Validate requestId exists if provided, otherwise use latest pending request
       if (!requestId) {
         // Find the most recent pending request
-        const pendingRequests = existing.infoRequestHistory.filter((r: any) => r.status === 'PENDING');
+        const pendingRequests = (existing.infoRequestHistory || []).filter((r: any) => r.status === 'PENDING');
         if (pendingRequests.length > 0) {
           // Sort by requestedAt descending and take the first
           pendingRequests.sort((a: any, b: any) => b.requestedAt.getTime() - a.requestedAt.getTime());
@@ -252,7 +252,7 @@ export async function POST(req: NextRequest) {
       }
 
       // Verify requestId exists in history
-      const request = existing.infoRequestHistory.find((r: any) => r.id === requestId);
+      const request = (existing.infoRequestHistory || []).find((r: any) => r.id === requestId);
       if (!request) {
         return NextResponse.json({ error: 'Invalid requestId' }, { status: 400, headers });
       }
@@ -282,10 +282,11 @@ export async function POST(req: NextRequest) {
         submittedBy: user.email || user.userId,
       };
 
+      existing.infoResponseHistory = existing.infoResponseHistory || [];
       existing.infoResponseHistory.push(newResponse as any);
 
       // Update request status to ANSWERED
-      existing.infoRequestHistory = existing.infoRequestHistory.map((r: any) => 
+      existing.infoRequestHistory = (existing.infoRequestHistory || []).map((r: any) => 
         r.id === requestId ? { ...r, status: 'ANSWERED' } : r
       ) as any;
 

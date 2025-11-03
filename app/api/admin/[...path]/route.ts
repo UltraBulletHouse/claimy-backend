@@ -502,11 +502,6 @@ export async function POST(req: NextRequest) {
       if (!c) return NextResponse.json({ error: 'Not found' }, { status: 404, headers });
       if (!c.userEmail) return NextResponse.json({ error: 'Case has no userEmail' }, { status: 400, headers });
 
-      // Generate unique request ID
-      const { randomUUID } = await import('crypto');
-      const requestId = randomUUID();
-      const now = new Date();
-
       // Initialize history arrays if they don't exist
       if (!c.infoRequestHistory) {
         (c as any).infoRequestHistory = [];
@@ -515,8 +510,13 @@ export async function POST(req: NextRequest) {
         (c as any).infoResponseHistory = [];
       }
 
+      // Generate unique request ID
+      const { randomUUID } = await import('crypto');
+      const requestId = randomUUID();
+      const now = new Date();
+
       // If supersedePrevious, mark all PENDING requests as SUPERSEDED
-      if (supersedePrevious && c.infoRequestHistory.length > 0) {
+      if (supersedePrevious && c.infoRequestHistory && c.infoRequestHistory.length > 0) {
         c.infoRequestHistory = c.infoRequestHistory.map((req: any) => ({
           ...req,
           status: req.status === 'PENDING' ? 'SUPERSEDED' : req.status,
@@ -533,6 +533,7 @@ export async function POST(req: NextRequest) {
         status: 'PENDING' as const,
       };
       
+      c.infoRequestHistory = c.infoRequestHistory || [];
       c.infoRequestHistory.push(newRequest as any);
 
       // Update legacy fields for backward compatibility
