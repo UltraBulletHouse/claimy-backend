@@ -95,6 +95,7 @@ export async function GET(req: NextRequest) {
           id: req.id,
           message: req.message,
           requiresFile: req.requiresFile,
+          requiresYesNo: req.requiresYesNo,
           requestedAt: req.requestedAt.toISOString(),
           hasResponse: responseHistory.some((res: any) => res.requestId === req.id),
         }));

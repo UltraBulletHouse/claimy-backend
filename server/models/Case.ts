@@ -35,6 +35,7 @@ export interface CaseInfoRequestHistoryEntry {
   id: string;
   message: string;
   requiresFile: boolean;
+  requiresYesNo: boolean;
   requestedAt: Date;
   requestedBy: string;
   status: InfoRequestStatus;
@@ -167,6 +168,7 @@ const CaseSchema = new Schema<CaseDocument>(
             id: { type: String, required: true },
             message: { type: String, required: true },
             requiresFile: { type: Boolean, default: false },
+            requiresYesNo: { type: Boolean, default: false },
             requestedAt: { type: Date, required: true },
             requestedBy: { type: String, required: true },
             status: { type: String, enum: ['PENDING', 'ANSWERED', 'SUPERSEDED'], default: 'PENDING' },

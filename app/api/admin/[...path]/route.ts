@@ -492,6 +492,7 @@ export async function POST(req: NextRequest) {
         ? (payload as any).message.trim()
         : '';
       const requiresFile = !!(payload as any)?.requiresFile;
+      const requiresYesNo = !!(payload as any)?.requiresYesNo;
       const supersedePrevious = !!(payload as any)?.supersedePrevious;
 
       if (!message) {
@@ -528,6 +529,7 @@ export async function POST(req: NextRequest) {
         id: requestId,
         message,
         requiresFile,
+        requiresYesNo,
         requestedAt: now,
         requestedBy: admin.email,
         status: 'PENDING' as const,
