@@ -17,6 +17,7 @@ export interface CaseResolution {
   code?: string;
   addedAt?: Date;
   expiryDate?: Date;
+  used?: boolean;
 }
 
 export interface CaseStatusHistoryEntry {
@@ -160,6 +161,7 @@ const CaseSchema = new Schema<CaseDocument>(
         code: { type: String, default: undefined },
         addedAt: { type: Date, default: undefined },
         expiryDate: { type: Date, default: undefined },
+        used: { type: Boolean, default: false },
       },
       default: null,
     },

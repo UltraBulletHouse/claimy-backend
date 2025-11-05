@@ -18,7 +18,7 @@ function corsHeaders(req: NextRequest): Headers {
   if (allowAll) headers.set('Access-Control-Allow-Origin', '*');
   else if (origin && allowedOrigins.includes(origin)) headers.set('Access-Control-Allow-Origin', origin);
   headers.set('Vary', 'Origin');
-  headers.set('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  headers.set('Access-Control-Allow-Methods', 'GET,POST,PATCH,OPTIONS');
   headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept');
   headers.set('Access-Control-Max-Age', '86400');
   return headers;
@@ -341,6 +341,53 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Not found' }, { status: 404, headers });
   } catch (e: any) {
     console.error('[public catch-all] POST failed', e);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500, headers });
+  }
+}
+
+export async function PATCH(req: NextRequest) {
+  const headers = corsHeaders(req);
+  try {
+    const seg = segmentsAfterApi(req);
+    
+    // /public/cases/:id/voucher-used
+    if (seg.length === 3 && seg[0] === 'cases' && seg[2] === 'voucher-used') {
+      const authHeader = req.headers.get('authorization');
+      const user = await getUserFromToken(authHeader);
+      if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401, headers });
+      
+      const caseId = seg[1];
+      const body = await req.json().catch(() => null);
+      if (!body || typeof body !== 'object') {
+        return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400, headers });
+      }
+      
+      const used = (body as any).used;
+      if (typeof used !== 'boolean') {
+        return NextResponse.json({ error: 'Invalid "used" value' }, { status: 400, headers });
+      }
+      
+      await connectDB();
+      const existing = await CaseModel.findOne({ _id: caseId, userId: user.userId });
+      if (!existing) {
+        return NextResponse.json({ error: 'Case not found' }, { status: 404, headers });
+      }
+      
+      // Only allow updating vouchers for approved cases with resolution codes
+      if (existing.status !== 'APPROVED' || !existing.resolution?.code) {
+        return NextResponse.json({ error: 'No voucher available for this case' }, { status: 400, headers });
+      }
+      
+      // Update the used status in the resolution
+      existing.resolution.used = used;
+      await existing.save();
+      
+      return NextResponse.json({ ok: true, used }, { status: 200, headers });
+    }
+    
+    return NextResponse.json({ error: 'Not found' }, { status: 404, headers });
+  } catch (e: any) {
+    console.error('[public catch-all] PATCH failed', e);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500, headers });
   }
 }
