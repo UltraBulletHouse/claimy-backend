@@ -239,7 +239,30 @@ export async function POST(req: NextRequest) {
     // /admin/cases/:id/approve
     if (seg.length === 3 && seg[0] === 'cases' && seg[2] === 'approve') {
       await connectDB();
-      await updateCaseStatus(seg[1], 'APPROVED', undefined, admin.email);
+      const body = await req.json();
+      const { code, expiryDate } = body || {};
+      
+      if (code) {
+        const now = new Date();
+        // If no expiry date provided, default to 90 days from now
+        const expiry = expiryDate ? new Date(expiryDate) : new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+        
+        // Update resolution with code and expiry date
+        await CaseModel.findByIdAndUpdate(seg[1], {
+          $set: {
+            resolution: {
+              code: code,
+              addedAt: now,
+              expiryDate: expiry
+            }
+          }
+        });
+        
+        await updateCaseStatus(seg[1], 'APPROVED', `Resolution code ${code} (expires: ${expiry.toISOString().split('T')[0]})`, admin.email);
+      } else {
+        await updateCaseStatus(seg[1], 'APPROVED', undefined, admin.email);
+      }
+      
       return NextResponse.json({ ok: true }, { headers });
     }
     // /admin/cases/:id/code
