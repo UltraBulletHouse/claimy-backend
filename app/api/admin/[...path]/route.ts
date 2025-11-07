@@ -326,10 +326,10 @@ export async function POST(req: NextRequest) {
         }
       }
       if (attachProduct) {
-        await pushFromUrl((c as any).productImageUrl || (Array.isArray(c.images) ? c.images[0] : null), 'product.jpg');
+        await pushFromUrl(Array.isArray(c.images) ? c.images[0] : null, 'product.jpg');
       }
       if (attachReceipt) {
-        await pushFromUrl((c as any).receiptImageUrl || (Array.isArray(c.images) ? c.images[1] : null), 'receipt.jpg');
+        await pushFromUrl(Array.isArray(c.images) ? c.images[1] : null, 'receipt.jpg');
       }
       
       // NEW: Attach files from info response history
@@ -491,10 +491,10 @@ export async function POST(req: NextRequest) {
         }
       }
       if (attachProduct) {
-        await pushFromUrl((c as any).productImageUrl || (Array.isArray(c.images) ? c.images[0] : null), 'product.jpg');
+        await pushFromUrl(Array.isArray(c.images) ? c.images[0] : null, 'product.jpg');
       }
       if (attachReceipt) {
-        await pushFromUrl((c as any).receiptImageUrl || (Array.isArray(c.images) ? c.images[1] : null), 'receipt.jpg');
+        await pushFromUrl(Array.isArray(c.images) ? c.images[1] : null, 'receipt.jpg');
       }
 
       console.log('[admin] reply start', { caseId: seg[1], to, subject: (derivedSubject || providedSubject || fallbackSubject), hasBody: !!textBody, threadId: c.threadId, attachments: attachments.map(a => ({ filename: a.filename, contentType: a.contentType })) });

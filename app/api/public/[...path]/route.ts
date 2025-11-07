@@ -126,7 +126,7 @@ export async function POST(req: NextRequest) {
       if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401, headers });
       const contentType = req.headers.get('content-type') || '';
       let body: any = null;
-      let uploaded: { productImageUrl?: string | null; receiptImageUrl?: string | null } = {};
+      let uploadedUrls: string[] = [];
       if (contentType.includes('multipart/form-data')) {
         const formData = await req.formData();
         const store = formData.get('store')?.toString();
@@ -151,8 +151,9 @@ export async function POST(req: NextRequest) {
           uploadOne(productFile, `claimy/${user.userId}`),
           uploadOne(receiptFile, `claimy/${user.userId}`),
         ]);
-        uploaded = { productImageUrl, receiptImageUrl };
-        body = { store, product, description, images: [] };
+        if (productImageUrl) uploadedUrls.push(productImageUrl);
+        if (receiptImageUrl) uploadedUrls.push(receiptImageUrl);
+        body = { store, product, description, images: uploadedUrls };
       } else {
         body = await req.json().catch(() => null as unknown);
         if (!body || typeof body !== 'object') {
@@ -172,8 +173,6 @@ export async function POST(req: NextRequest) {
         product: product.trim(),
         description: description.trim(),
         images: normalizedImages,
-        ...(uploaded.productImageUrl ? { productImageUrl: uploaded.productImageUrl } : {}),
-        ...(uploaded.receiptImageUrl ? { receiptImageUrl: uploaded.receiptImageUrl } : {}),
       });
       return NextResponse.json(doc.toJSON(), { status: 201, headers });
     }
@@ -336,7 +335,8 @@ export async function POST(req: NextRequest) {
         uploadOne(product, `claimy/${user.userId}`),
         uploadOne(receipt, `claimy/${user.userId}`),
       ]);
-      return NextResponse.json({ productImageUrl: productUrl, receiptImageUrl: receiptUrl }, { headers });
+      const images = [productUrl, receiptUrl].filter(Boolean);
+      return NextResponse.json({ images, productImageUrl: productUrl, receiptImageUrl: receiptUrl }, { headers });
     }
     return NextResponse.json({ error: 'Not found' }, { status: 404, headers });
   } catch (e: any) {

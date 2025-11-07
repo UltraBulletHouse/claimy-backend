@@ -54,10 +54,6 @@ export interface CaseInfoResponseHistoryEntry {
   submittedBy: string;
 }
 
-// Legacy interfaces - kept for backward compatibility
-export interface CaseInfoRequest { message: string; requiresFile?: boolean; requestedAt: Date; }
-export interface CaseInfoResponse { answer?: string; fileUrl?: string | null; submittedAt: Date; }
-
 export interface CaseDocument extends Document {
   userId: string; // Firebase UID
   userEmail?: string | null;
@@ -65,8 +61,6 @@ export interface CaseDocument extends Document {
   product: string;
   description: string;
   images: string[];
-  productImageUrl?: string | null;
-  receiptImageUrl?: string | null;
   status: CaseStatus;
   createdAt: Date;
   updatedAt: Date;
@@ -77,12 +71,6 @@ export interface CaseDocument extends Document {
   // NEW: History arrays
   infoRequestHistory?: CaseInfoRequestHistoryEntry[];
   infoResponseHistory?: CaseInfoResponseHistoryEntry[];
-  // Legacy fields - kept for backward compatibility
-  infoRequest?: CaseInfoRequest | null;
-  infoResponse?: CaseInfoResponse | null;
-  threadId?: string | null;
-  lastEmailReplyAt?: Date | null;
-  lastEmailMessageId?: string | null;
 }
 
 const CaseSchema = new Schema<CaseDocument>(
@@ -117,16 +105,6 @@ const CaseSchema = new Schema<CaseDocument>(
     images: {
       type: [String],
       default: []
-    },
-    productImageUrl: {
-      type: String,
-      default: null,
-      trim: true,
-    },
-    receiptImageUrl: {
-      type: String,
-      default: null,
-      trim: true,
     },
     status: {
       type: String,
@@ -200,22 +178,6 @@ const CaseSchema = new Schema<CaseDocument>(
       ],
       default: [],
     },
-    infoRequest: {
-      type: new Schema<CaseInfoRequest>({
-        message: { type: String, required: true },
-        requiresFile: { type: Boolean, default: false },
-        requestedAt: { type: Date, required: true },
-      }, { _id: false }),
-      default: null,
-    },
-    infoResponse: {
-      type: new Schema<CaseInfoResponse>({
-        answer: { type: String, default: undefined },
-        fileUrl: { type: String, default: null },
-        submittedAt: { type: Date, required: true },
-      }, { _id: false }),
-      default: null,
-    },
     statusHistory: {
       type: [
         new Schema<CaseStatusHistoryEntry>(
@@ -229,19 +191,6 @@ const CaseSchema = new Schema<CaseDocument>(
         ),
       ],
       default: [],
-    },
-    threadId: {
-      type: String,
-      index: true,
-      default: null
-    },
-    lastEmailReplyAt: {
-      type: Date,
-      default: null
-    },
-    lastEmailMessageId: {
-      type: String,
-      default: null
     }
   },
   {
