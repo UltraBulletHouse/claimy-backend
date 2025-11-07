@@ -64,6 +64,9 @@ export interface CaseDocument extends Document {
   status: CaseStatus;
   createdAt: Date;
   updatedAt: Date;
+  threadId?: string | null;
+  lastEmailReplyAt?: Date | null;
+  lastEmailMessageId?: string | null;
   manualAnalysis?: CaseManualAnalysis | null;
   emails?: CaseEmailEntry[];
   resolution?: CaseResolution | null;
@@ -71,6 +74,8 @@ export interface CaseDocument extends Document {
   // NEW: History arrays
   infoRequestHistory?: CaseInfoRequestHistoryEntry[];
   infoResponseHistory?: CaseInfoResponseHistoryEntry[];
+  // Legacy field for backward compatibility
+  infoResponse?: any;
 }
 
 const CaseSchema = new Schema<CaseDocument>(
@@ -110,6 +115,23 @@ const CaseSchema = new Schema<CaseDocument>(
       type: String,
       enum: ['PENDING', 'IN_REVIEW', 'NEED_INFO', 'APPROVED', 'REJECTED'],
       default: 'PENDING'
+    },
+    threadId: {
+      type: String,
+      default: null,
+      index: true
+    },
+    lastEmailReplyAt: {
+      type: Date,
+      default: null
+    },
+    lastEmailMessageId: {
+      type: String,
+      default: null
+    },
+    infoResponse: {
+      type: Schema.Types.Mixed,
+      default: null
     },
     manualAnalysis: {
       type: {
