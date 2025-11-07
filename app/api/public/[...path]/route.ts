@@ -134,6 +134,21 @@ export async function POST(req: NextRequest) {
         const description = formData.get('description')?.toString();
         const productFile = formData.get('productImage') as File | null;
         const receiptFile = formData.get('receiptImage') as File | null;
+        
+        // Validate file size and type
+        const validateImageFile = (file: File | null) => {
+          if (!file) return null;
+          const maxSize = 10 * 1024 * 1024; // 10 MB
+          const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+          if (file.size > maxSize) {
+            throw new Error('File size must be under 10 MB');
+          }
+          if (!allowedTypes.includes(file.type)) {
+            throw new Error('Only JPG, PNG, and WebP images are allowed');
+          }
+          return file;
+        };
+        
         async function uploadOne(file: File | null, folder: string) {
           if (!file) return null;
           const arrayBuffer = await file.arrayBuffer();
@@ -147,6 +162,9 @@ export async function POST(req: NextRequest) {
           });
           return res?.secure_url as string;
         }
+        
+        validateImageFile(productFile);
+        validateImageFile(receiptFile);
         const [productImageUrl, receiptImageUrl] = await Promise.all([
           uploadOne(productFile, `claimy/${user.userId}`),
           uploadOne(receiptFile, `claimy/${user.userId}`),
@@ -202,6 +220,16 @@ export async function POST(req: NextRequest) {
         answer = formData.get('answer')?.toString() || undefined;
         const file = formData.get('attachment') as File | null;
         if (file) {
+          // Validate file size and type
+          const maxSize = 10 * 1024 * 1024; // 10 MB
+          const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+          if (file.size > maxSize) {
+            return NextResponse.json({ error: 'File size must be under 10 MB' }, { status: 400, headers });
+          }
+          if (!allowedTypes.includes(file.type)) {
+            return NextResponse.json({ error: 'Only JPG, PNG, and WebP images are allowed' }, { status: 400, headers });
+          }
+          
           // Generate unique response ID for folder organization
           const { randomUUID } = await import('crypto');
           const responseId = randomUUID();
@@ -318,6 +346,24 @@ export async function POST(req: NextRequest) {
       const formData = await req.formData();
       const product = formData.get('product') as File | null;
       const receipt = formData.get('receipt') as File | null;
+      
+      // Validate file size and type
+      const validateImageFile = (file: File | null) => {
+        if (!file) return null;
+        const maxSize = 10 * 1024 * 1024; // 10 MB
+        const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+        if (file.size > maxSize) {
+          throw new Error('File size must be under 10 MB');
+        }
+        if (!allowedTypes.includes(file.type)) {
+          throw new Error('Only JPG, PNG, and WebP images are allowed');
+        }
+        return file;
+      };
+      
+      validateImageFile(product);
+      validateImageFile(receipt);
+      
       async function uploadOne(file: File | null, folder: string) {
         if (!file) return null;
         const arrayBuffer = await file.arrayBuffer();
