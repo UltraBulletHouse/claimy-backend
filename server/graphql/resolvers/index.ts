@@ -1,6 +1,7 @@
 import { userResolvers } from './userResolvers';
 import { caseResolvers } from './caseResolvers';
 import { rewardResolvers } from './rewardResolvers';
+import { notificationResolvers } from './notificationResolvers';
 
 type ResolverMap = Record<string, Record<string, unknown>>;
 
@@ -16,4 +17,4 @@ function mergeResolvers(resolverMaps: ResolverMap[]): ResolverMap {
   }, {});
 }
 
-export const resolvers = mergeResolvers([userResolvers, caseResolvers, rewardResolvers]);
+export const resolvers = mergeResolvers([userResolvers, caseResolvers, rewardResolvers, notificationResolvers]);

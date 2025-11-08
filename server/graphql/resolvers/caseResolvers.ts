@@ -1,8 +1,9 @@
 import { GraphQLContext } from '../context';
 import { connectDB } from '../../lib/db';
 import { CaseStatus } from '../../models/Case';
+import { createCaseStatusNotification } from '../../lib/notificationService';
 
-const VALID_STATUSES: CaseStatus[] = ['PENDING', 'NEED_INFO', 'APPROVED', 'REJECTED'];
+const VALID_STATUSES: CaseStatus[] = ['PENDING', 'IN_REVIEW', 'NEED_INFO', 'APPROVED', 'REJECTED'];
 
 function ensureAuthenticated(ctx: GraphQLContext) {
   if (!ctx.user) {
@@ -45,15 +46,26 @@ export const caseResolvers = {
         throw new Error('Invalid status provided.');
       }
 
-      const caseDoc = await ctx.models.Case.findOneAndUpdate(
-        { _id: args.id, userId: ctx.user!.userId },
-        { status: args.status },
-        { new: true }
-      );
+      const caseDoc = await ctx.models.Case.findOne({ _id: args.id, userId: ctx.user!.userId });
 
       if (!caseDoc) {
         throw new Error('Case not found or access denied.');
       }
+
+      const previousStatus = caseDoc.status;
+
+      if (previousStatus === args.status) {
+        return caseDoc.toJSON();
+      }
+
+      caseDoc.status = args.status;
+      await caseDoc.save();
+
+      await createCaseStatusNotification({
+        caseDoc,
+        oldStatus: previousStatus,
+        newStatus: args.status
+      });
 
       return caseDoc.toJSON();
     }

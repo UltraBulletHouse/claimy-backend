@@ -1,6 +1,7 @@
 export const typeDefs = /* GraphQL */ `
   enum CaseStatus {
     PENDING
+    IN_REVIEW
     NEED_INFO
     APPROVED
     REJECTED
@@ -42,10 +43,30 @@ export const typeDefs = /* GraphQL */ `
     user: User!
   }
 
+  type CaseNotificationContext {
+    id: ID!
+    store: String
+    product: String
+    description: String
+    status: CaseStatus
+  }
+
+  type UserNotification {
+    id: ID!
+    userId: ID!
+    caseId: ID!
+    oldStatus: CaseStatus
+    newStatus: CaseStatus!
+    seen: Boolean!
+    createdAt: String!
+    case: CaseNotificationContext
+  }
+
   type Query {
     me: User
     getCases: [Case!]!
     getRewards: [Reward!]!
+    getUserNotifications(userId: ID): [UserNotification!]!
   }
 
   type Mutation {
@@ -57,5 +78,10 @@ export const typeDefs = /* GraphQL */ `
     markRewardUsed(id: ID!, used: Boolean!): Reward!
     sendNotification(title: String!, body: String!, userId: ID!): Boolean!
     updateFcmToken(token: String!): User!
+    markNotificationAsSeen(notificationId: ID!): Boolean!
+  }
+
+  type Subscription {
+    notificationAdded(userId: ID): UserNotification!
   }
 `;
