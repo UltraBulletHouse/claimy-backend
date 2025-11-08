@@ -87,7 +87,10 @@ export const userResolvers = {
     ) => {
       ensureAuthenticated(ctx);
       await connectDB();
-      await sendFCMNotification(args.userId, args.title, args.body);
+      await sendFCMNotification(args.userId, {
+        title: args.title,
+        body: args.body
+      });
       return true;
     }
   }

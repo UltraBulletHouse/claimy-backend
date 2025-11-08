@@ -9,6 +9,12 @@ const {
   FIREBASE_DATABASE_URL
 } = process.env;
 
+type NotificationPayload = {
+  title: string;
+  body: string;
+  data?: Record<string, string | undefined>;
+};
+
 let firebaseInitialized = false;
 
 function initializeFirebase() {
@@ -40,28 +46,41 @@ function initializeFirebase() {
   }
 }
 
-export async function sendPushNotification(userToken: string, title: string, body: string) {
+export async function sendPushNotification(userToken: string, payload: NotificationPayload) {
   initializeFirebase();
 
   if (!firebaseInitialized) {
     throw new Error('Firebase is not initialized. Check credentials.');
   }
 
+  const data = payload.data
+    ? Object.entries(payload.data).reduce<Record<string, string>>((acc, [key, value]) => {
+        if (typeof value === 'string') {
+          acc[key] = value;
+        } else if (typeof value === 'number' || typeof value === 'boolean') {
+          acc[key] = String(value);
+        }
+        return acc;
+      }, {})
+    : undefined;
+
   await admin.messaging().send({
     token: userToken,
     notification: {
-      title,
-      body
-    }
+      title: payload.title,
+      body: payload.body
+    },
+    data
   });
 }
 
-export async function sendFCMNotification(userId: string, title: string, body: string) {
+export async function sendFCMNotification(userId: string, payload: NotificationPayload) {
   await connectDB();
   const user = await UserModel.findById(userId);
   if (!user || !user.fcmToken) {
-    throw new Error('User token not available for notifications.');
+    console.warn('FCM token not available for user', userId);
+    return;
   }
 
-  await sendPushNotification(user.fcmToken, title, body);
+  await sendPushNotification(user.fcmToken, payload);
 }
